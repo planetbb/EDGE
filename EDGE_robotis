@@ -1,0 +1,1608 @@
+import { useState } from "react";
+import {
+  BarChart, Bar, LineChart, Line, RadarChart, Radar, PolarGrid,
+  PolarAngleAxis, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  ReferenceLine, Legend, ComposedChart
+} from "recharts";
+
+/* ─── 데이터 ─────────────────────────────── */
+const revenueData = [
+  { year: "2021", rev: 224, op: -9, opM: -4.2 },
+  { year: "2022", rev: 259, op: -22, opM: -8.4 },
+  { year: "2023", rev: 291, op: -53, opM: -18.2 },
+  { year: "2024", rev: 300, op: -30, opM: -10.0 },
+  { year: "2025E", rev: 420, op: 52, opM: 12.4 },
+  { year: "2026F", rev: 680, op: 110, opM: 16.2 },
+];
+
+const quarterData = [
+  { q: "24Q1", rev: 70, op: -12 },
+  { q: "24Q2", rev: 75, op: -9 },
+  { q: "24Q3", rev: 68, op: -9 },
+  { q: "24Q4", rev: 87, op: 0 },
+  { q: "25Q1", rev: 102, op: 8 },
+  { q: "25Q2", rev: 105, op: 11 },
+  { q: "25Q3", rev: 97, op: 12 },
+  { q: "25Q4", rev: 116, op: 21 },
+];
+
+const radarData = [
+  { subject: "유동성", A: 75 },
+  { subject: "안정성", A: 68 },
+  { subject: "성장성", A: 90 },
+  { subject: "수익성", A: 55 },
+  { subject: "활동성", A: 62 },
+];
+
+const valuation = [
+  { label: "현재 주가 (2026.03)", value: "242,000원", mono: true, color: "#E8C547" },
+  { label: "시가총액", value: "3.67조원", mono: true, color: "#E8C547" },
+  { label: "2025 연간 매출 (추정)", value: "약 420억원", mono: true, color: "#aaa" },
+  { label: "PSR (주가/매출)", value: "약 87x", mono: false, color: "#FF8C69", warn: true },
+  { label: "PBR", value: "약 12x", mono: false, color: "#FF8C69", warn: true },
+  { label: "애널리스트 목표가 평균", value: "149,000원", mono: true, color: "#4EC9B0" },
+  { label: "다이와증권 목표가", value: "360,000원", mono: true, color: "#7B9FFF" },
+  { label: "컨센서스 하락 여력", value: "-38% (고평가 구간)", mono: false, color: "#FF8C69", warn: true },
+];
+
+const peers = [
+  { name: "로보티즈", cap: "3.67조", psr23: "11.2x", psr25: "87x", pbr25: "12x", color: "#E8C547" },
+  { name: "레인보우로보틱스", cap: "2.9조", psr23: "N/A", psr25: "N/A", pbr25: "18x", color: "#4EC9B0" },
+  { name: "두산로보틱스", cap: "3.2조", psr23: "N/A", psr25: "N/A", pbr25: "9x", color: "#7B9FFF" },
+  { name: "에스피지", cap: "0.7조", psr23: "1.8x", psr25: "2.2x", pbr25: "3.4x", color: "#FF8C69" },
+];
+
+const checkpoints = [
+  { icon: "📌", label: "액추에이터 해외 매출 확대 속도", note: "2025 4Q 영업이익률 36%로 급등. 고부가 로봇 손 제품 반영" },
+  { icon: "📌", label: "AI 워커 양산 및 수주 가시화", note: "2025년 70대 → 2027년 1,000대 목표. 오픈AI 공급 협의 진행 중" },
+  { icon: "📌", label: "LG전자 협업 구체화 여부", note: "2024년 6월 휴머노이드 공동연구 협약 체결. 실질 납품 여부 주목" },
+  { icon: "📌", label: "로봇 손(5F·20DoF) 양산 시점", note: "2026년부터 글로벌 빅테크 선주문 반영 기대" },
+  { icon: "📌", label: "물적분할 후 지배구조 안정화", note: "2025년 자율주행 사업부 분할 완료. 주주가치 영향 모니터링" },
+];
+
+const risks = [
+  "매출의 98% 다이나믹셀 단일 의존 → 집중 리스크 여전히 상존",
+  "모터 외부 조달 의존 → 공급망 병목 리스크",
+  "시총 3.67조 vs 매출 420억 → PSR 87x 극단적 프리미엄",
+  "자율주행로봇 규제·현장 배치 지연 가능성",
+  "테슬라 옵티머스 생산량 발표(2Q26) 기준치 미달 시 로봇주 전반 조정 우려",
+];
+
+/* ─── 컴포넌트 ───────────────────────────── */
+const TAB = ["체크포인트", "기업 개요", "마켓 포지셔닝", "파이프라인", "경쟁 분석", "실적 추이", "밸류에이션"];
+
+/* ─── 페이스메이커 데이터 ─── */
+// 모듈형 vs 수직계열화 구도
+const actuatorApproach = [
+  {
+    type: "모듈형 (Open Ecosystem)",
+    champion: "ROBOTIS DYNAMIXEL",
+    color: "#E8C547",
+    share25: 22,  // 연구·교육 시장 추정 점유
+    shareOpp: 55, // 개방 생태계 확대 시 기회
+    pros: ["표준화된 인터페이스 → 빠른 프로토타이핑", "ROS2·SDK 통합 → AI 학습 파이프라인 직결", "교체·유지보수 용이 (Hot-swap)", "다수 OEM 동시 납품 가능"],
+    cons: ["단가 경쟁력 (수직계열화 대비)", "초고성능 특수 로봇에는 한계"],
+    users: ["오픈AI R&D", "보스턴다이내믹스", "MIT", "K-휴머노이드 연합", "전세계 1,000+ 연구기관"],
+  },
+  {
+    type: "수직계열화 (Integrated)",
+    champion: "테슬라·유니트리·아지봇",
+    color: "#FF8C69",
+    share25: 78,
+    shareOpp: 45,
+    pros: ["원가 최소화 (대량양산)", "최적화된 성능·폼팩터", "IP 내재화"],
+    cons: ["개발 속도 느림", "AI 학습 생태계 구축 비용", "공급망 리스크 내재화", "OEM 외부 판매 불가"],
+    users: ["Tesla Optimus", "Unitree G1/R1", "AgiBot 링시"],
+  },
+];
+
+// 모듈형 채택률 시나리오 (연구→상업 전이 기준)
+const adoptionScenarios = [
+  { year: "2024", research: 80, earlyComm: 15, massComm: 5 },
+  { year: "2025E", research: 72, earlyComm: 22, massComm: 6 },
+  { year: "2026F", research: 60, earlyComm: 30, massComm: 10 },
+  { year: "2027F", research: 48, earlyComm: 35, massComm: 17 },
+  { year: "2028F", research: 38, earlyComm: 36, massComm: 26 },
+  { year: "2030F", research: 25, earlyComm: 33, massComm: 42 },
+];
+
+// 핵심 수혜 메커니즘
+const pacemaker = [
+  {
+    label: "Phase 1", title: "연구 표준 (현재)", color: "#4EC9B0", icon: "🔬",
+    desc: "글로벌 연구기관 80%+ 다이나믹셀 채택. 피지컬 AI 학습 데이터가 다이나믹셀 환경에서 생성됨.",
+    robotis: "다이나믹셀 = 피지컬AI 학습의 표준 하드웨어. 연구용 모델이 상업용으로 전환될 때 다이나믹셀 기반 설계가 기준점.",
+    kpi: "글로벌 연구기관 채택 수 / ROS2 패키지 DYNAMIXEL 의존도",
+  },
+  {
+    label: "Phase 2", title: "초기 상업화 전환 (2025~2027)", color: "#E8C547", icon: "🏭",
+    desc: "연구 프로토타입 → 소량 B2B 납품. 검증된 다이나믹셀 기반 설계가 그대로 양산 BOM에 탑재.",
+    robotis: "오픈AI AI 워커, K-휴머노이드 연합이 이 단계. 수직계열화 전환 전 모듈형 수요 피크.",
+    kpi: "AI 워커 수주 누적 / 로봇 손 빅테크 납품 건수",
+  },
+  {
+    label: "Phase 3", title: "대량양산 분기점 (2027~2030)", color: "#FF8C69", icon: "⚠️",
+    desc: "연간 수만 대 이상 생산 시 OEM들이 원가 절감 위해 내재화 검토. 모듈형 비중 감소 압력.",
+    robotis: "핵심 위험 구간. 고마진 Y 시리즈·로봇 손으로 포지션 유지해야. 표준에서 프리미엄으로 전략 전환 필요.",
+    kpi: "DYNAMIXEL Y 시리즈 OEM 채택 비율 / 로봇 손 대형 고객사 Lock-in 수",
+  },
+  {
+    label: "Phase 4", title: "생태계 플랫폼화 (2030+)", color: "#7B9FFF", icon: "🌐",
+    desc: "다이나믹셀이 로봇 관절의 USB-C처럼 통용 표준이 된 경우 vs. 틈새 프리미엄으로 축소된 경우.",
+    robotis: "낙관: 피지컬 AI OS + 하드웨어 표준 통합으로 인텔 CPU급 위상. 비관: 중국 저가에 시장 잠식.",
+    kpi: "독립 로봇 스타트업의 DYNAMIXEL 기본 채택 여부 / 표준화 기구 참여",
+  },
+];
+
+// 글로벌 휴머노이드 시장 vs 로보티즈 TAM
+const tamData = [
+  { year: "2025", market: 0.18, tam: 0.016, adopt: 8.9 },
+  { year: "2026F", market: 0.72, tam: 0.055, adopt: 7.6 },
+  { year: "2027F", market: 1.8, tam: 0.12, adopt: 6.7 },
+  { year: "2028F", market: 3.5, tam: 0.20, adopt: 5.7 },
+  { year: "2030F", market: 6.0, tam: 0.28, adopt: 4.7 },
+  { year: "2035F", market: 51, tam: 1.50, adopt: 2.9 },
+];
+
+/* ─── 경쟁분석 데이터 ─── */
+// K-로봇 비교
+const compData = [
+  { name: "로보티즈", cap: 3.67, rev25: 420, op25: 52, focus: "부품+피지컬AI", backer: "LG전자(2대주주)", listed: "KOSDAQ", color: "#E8C547" },
+  { name: "레인보우로보틱스", cap: 9.0, rev25: 220, op25: -30, focus: "협동·휴머노이드", backer: "삼성전자 인수", listed: "KOSDAQ", color: "#4EC9B0" },
+  { name: "두산로보틱스", cap: 5.2, rev25: 200, op25: -277, focus: "협동로봇", backer: "두산그룹", listed: "KOSPI", color: "#7B9FFF" },
+  { name: "에스피지", cap: 0.7, rev25: 800, op25: 110, focus: "모터·감속기", backer: "독립", listed: "KOSDAQ", color: "#FF8C69" },
+];
+
+// 글로벌 액추에이터 경쟁사 (중국 포함)
+const chinaRivals = [
+  {
+    name: "유니트리 (Unitree)", country: "🇨🇳", city: "항저우",
+    threat: "CRITICAL", threatColor: "#FF4444",
+    product: "G1·H1 액추에이터 내재화",
+    price: "G1 휴머노이드 $16,000 / R1 $5,900",
+    shipment: "2025년 4,200대 출하 (글로벌 2위)",
+    strength: "초저가 + 자체 액추에이터 수직계열화 완성. 글로벌 연구기관·대학 대량 납품",
+    weakness: "정밀도·내구성은 다이나믹셀 대비 열위. 선진국 수출 규제 리스크",
+    overlap: "연구·교육 시장에서 다이나믹셀 직접 대체 위협",
+  },
+  {
+    name: "아지봇 (AgiBot)", country: "🇨🇳", city: "상하이",
+    threat: "HIGH", threatColor: "#FF8C69",
+    product: "링시X2 전용 액추에이터",
+    price: "휴머노이드 완제품 위주, 부품 비공개",
+    shipment: "2025년 5,200대 출하 (글로벌 1위). LG전자·미래에셋 전략 투자",
+    strength: "최대 양산 규모. 알리바바 다모아카데미 AI 기술 접목. 중국 정부 지원",
+    weakness: "부품 외판보다 완제품 판매 중심. 해외 진출 제한적",
+    overlap: "직접 경쟁 낮으나 완제품 가격 압력으로 글로벌 시장 간접 압박",
+  },
+  {
+    name: "푸리에 (Fourier)", country: "🇨🇳", city: "상하이",
+    threat: "HIGH", threatColor: "#FF8C69",
+    product: "GR-2·GR-3 전용 액추에이터 + 재활로봇",
+    price: "기업가치 80억위안 (유니콘). 부품 OEM 판매",
+    shipment: "의료 재활 누적 100만명+ 서비스. 휴머노이드 연구기관 납품",
+    strength: "의료·재활 실증 데이터 강점. 힘 제어 기반 파지 기술. 글로벌 연구기관 파트너",
+    weakness: "휴머노이드 상용화 초기 단계. 양산 속도 느림",
+    overlap: "연구·의료 시장에서 다이나믹셀 연구용 수요 잠식 가능",
+  },
+  {
+    name: "다쟝이노베이션 (DJI계열)", country: "🇨🇳", city: "선전",
+    threat: "WATCH", threatColor: "#E8C547",
+    product: "로봇 구동 모듈 진출 검토",
+    price: "드론 부품 원가 절감 노하우 적용 예정",
+    shipment: "로봇 부품 시장 진출 공식화 (2025년 선언)",
+    strength: "세계 최대 드론 부품 공급망. 초소형 정밀 모터 기술. 글로벌 브랜드",
+    weakness: "로봇 액추에이터 실적 없음. 미·중 갈등 규제 리스크",
+    overlap: "중장기 시장 진입 시 가격 붕괴 위험 최대",
+  },
+  {
+    name: "MAXON Motor", country: "🇨🇭", city: "스위스",
+    threat: "MED", threatColor: "#4EC9B0",
+    product: "고정밀 DC 모터·액추에이터",
+    price: "프리미엄 산업용. 단가 다이나믹셀 대비 3~10배",
+    shipment: "화성 탐사로버 포함 우주·의료 분야 납품",
+    strength: "최고 신뢰성·정밀도. 방산·의료 인증 다수 보유",
+    weakness: "가격 매우 높음. 연구용 표준화 생태계 없음",
+    overlap: "프리미엄 산업 시장. 직접 충돌 낮음",
+  },
+];
+
+const radarCompare = [
+  { subject: "기술 원천성", robotis: 92, unitree: 70, agibot: 65, maxon: 95 },
+  { subject: "가격 경쟁력", robotis: 70, unitree: 98, agibot: 90, maxon: 20 },
+  { subject: "양산 규모",   robotis: 45, unitree: 95, agibot: 98, maxon: 60 },
+  { subject: "글로벌 생태계", robotis: 85, unitree: 55, agibot: 40, maxon: 80 },
+  { subject: "수익성",     robotis: 72, unitree: 50, agibot: 30, maxon: 85 },
+  { subject: "규제 리스크", robotis: 90, unitree: 40, agibot: 35, maxon: 95 },
+];
+
+/* ─── 파이프라인 데이터 ─── */
+const pipelineItems = [
+  {
+    stage: "출하 중", stageColor: "#4EC9B0",
+    product: "AI 워커 (고정형)", icon: "🦾",
+    detail: "오픈AI·국내외 40곳+ 주문 접수. 고정형 4천만원대, 이동형 7천만원대. PoC 완료, 공식 판매 개시.",
+    target: "2025년 70대 → 2027년 1,000대",
+    rev: "25년 35억E → 27년 632억F",
+    risk: "생산 캐파 제약",
+  },
+  {
+    stage: "CES 공개", stageColor: "#7B9FFF",
+    product: "로봇 손 HX5 (20자유도)", icon: "🤲",
+    detail: "CES 2026 K-휴머노이드관 시연. 핑거 전용 액추에이터 자체 개발. 오픈AI에 R&D용 소량 납품 완료.",
+    target: "2026년 양산 · 글로벌 빅테크 납품",
+    rev: "26년부터 매출 본격 반영",
+    risk: "경쟁사(테솔로, 샤르파) 동시 출시",
+  },
+  {
+    stage: "협의 중", stageColor: "#E8C547",
+    product: "AI 워커 (모바일형)", icon: "🚀",
+    detail: "바퀴형 베이스 추가. 25자유도 자체 액추에이터. 대기업 물류센터·공장 R&D 검증 진행 중.",
+    target: "2025 4Q 정식 출시",
+    rev: "26년 B2B 납품 본격화",
+    risk: "현장 검증 지연 가능성",
+  },
+  {
+    stage: "개발 중", stageColor: "#FF8C69",
+    product: "DYNAMIXEL Y 시리즈", icon: "🔩",
+    detail: "고성능 프레임리스 모터 + 전자식 브레이크. 협동로봇 관절 최적화. 기존 X·P 대비 정밀도 향상.",
+    target: "2026년 양산 확대",
+    rev: "액추에이터 부문 ASP 상승 기여",
+    risk: "기존 제품 캐니벌라이제이션",
+  },
+  {
+    stage: "RaaS 운영", stageColor: "#C084FC",
+    product: "GAEMI 자율주행 로봇", icon: "🚗",
+    detail: "운행안전인증 국내 1호. CJ물류 협약. 호텔·관공서 구독 서비스 중. 실외 배송 본격화 준비.",
+    target: "26년 RaaS 가입처 확대",
+    rev: "구독 MRR 성장 중",
+    risk: "규제·현장 배치 속도",
+  },
+];
+
+const roadmap = [
+  { period: "25 1H", events: ["AI 워커 고정형 출시", "흑자 전환 달성", "오픈AI 협의 구체화"] },
+  { period: "25 2H", events: ["로봇 손 CoRL 공개", "모바일형 AI 워커 출시", "연간 흑자 확정"] },
+  { period: "26 1H", events: ["CES 2026 HX5 시연", "로봇 손 양산 개시", "AI 워커 100대 달성 목표"] },
+  { period: "26 2H", events: ["글로벌 빅테크 납품 본격화", "DYD 감속기 협동로봇 채택", "GAEMI RaaS 확대"] },
+  { period: "27+", events: ["AI 워커 1,000대", "액추에이터 매출 970억F", "휴머노이드 매출 632억F"] },
+];
+
+const CTooltip = ({ active, payload, label }) => {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <div style={{ background: "#1a1a1e", border: "1px solid #333", borderRadius: 8, padding: "10px 14px", fontSize: 11 }}>
+      <div style={{ color: "#888", marginBottom: 4 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: p.color || "#E8C547" }}>{p.name}: {p.value > 0 ? "+" : ""}{p.value}{p.name && p.name.includes("률") ? "%" : "억원"}</div>
+      ))}
+    </div>
+  );
+};
+
+export default function App() {
+  const [tab, setTab] = useState(0);
+  const [checked, setChecked] = useState({});
+  const toggle = k => setChecked(p => ({ ...p, [k]: !p[k] }));
+
+  return (
+    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", background: "#0A0A0C", minHeight: "100vh", color: "#E0DDD5" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        .card { background: #111114; border: 1px solid #1E1E24; border-radius: 12px; }
+        .hover-row { cursor: pointer; border-radius: 8px; transition: background .15s; }
+        .hover-row:hover { background: rgba(255,255,255,.04); }
+        .tab-btn { background: none; border: none; cursor: pointer; transition: all .2s; }
+        ::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-thumb { background:#333; border-radius:2px; }
+      `}</style>
+
+      {/* ── 헤더 ── */}
+      <div style={{ background: "#0D0D10", borderBottom: "1px solid #1E1E24", padding: "0 36px" }}>
+        {/* 상단 바 */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 0 14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ background: "linear-gradient(135deg,#E8C547,#FF8C69)", width: 38, height: 38, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🤖</div>
+            <div>
+              <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#555", letterSpacing: 2, marginBottom: 2 }}>KOSDAQ | 자본재 | 기업분석</div>
+              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5 }}>
+                로보티즈 <span style={{ color: "#999", fontSize: 14, fontWeight: 400 }}>(108490)</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 22, fontWeight: 600, color: "#E8C547" }}>242,000<span style={{ fontSize: 12, color: "#666" }}>원</span></div>
+              <div style={{ fontSize: 11, color: "#555" }}>시총 3.67조 · KOSDAQ</div>
+            </div>
+            <div style={{ background: "#1A2A1A", border: "1px solid #2A4A2A", borderRadius: 8, padding: "6px 14px", fontSize: 11, color: "#4EC9B0", fontFamily: "'IBM Plex Mono',monospace", letterSpacing: 1 }}>
+              2026.03 UPDATE
+            </div>
+          </div>
+        </div>
+
+        {/* 체크포인트 요약 배너 */}
+        <div style={{ background: "#0F1620", border: "1px solid #1E2E3E", borderRadius: 10, padding: "10px 16px", marginBottom: 14, fontSize: 12, color: "#7B9FFF", lineHeight: 1.7 }}>
+          <span style={{ fontWeight: 600 }}>■ </span>로보티즈는 피지컬 AI 시대 핵심 부품(다이나믹셀 액추에이터·감속기) 및 AI 워커 전문기업. 2025년 코스닥 상장(2018년) 이후 첫 연간 흑자 전환 달성.&nbsp;&nbsp;
+          <span style={{ fontWeight: 600 }}>■ </span>주가 1년 +1,052% 급등으로 PSR 87배 수준의 극단적 프리미엄 형성. 실적 가시화 속도가 핵심 변수.&nbsp;&nbsp;
+          <span style={{ fontWeight: 600 }}>■ </span>2025년 매출 약 420억원, 영업이익 약 52억원 추정(4Q25 영업이익률 36% 기록).
+        </div>
+
+        {/* 탭 */}
+        <div style={{ display: "flex", gap: 2 }}>
+          {TAB.map((t, i) => (
+            <button key={i} className="tab-btn" onClick={() => setTab(i)}
+              style={{ color: tab === i ? "#E8C547" : "#555", fontSize: 13, fontWeight: tab === i ? 600 : 400, padding: "12px 18px", borderBottom: tab === i ? "2px solid #E8C547" : "2px solid transparent" }}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 36px 60px" }}>
+
+        {/* ══ 0. 체크포인트 ══ */}
+        {tab === 0 && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+              {[
+                { label: "2025 매출(E)", value: "420억원", sub: "+40% YoY", color: "#E8C547" },
+                { label: "2025 영업이익(E)", value: "+52억원", sub: "첫 연간 흑자", color: "#4EC9B0" },
+                { label: "4Q25 OPM", value: "36%", sub: "역대 최고 수준", color: "#7B9FFF" },
+                { label: "2026 매출 목표", value: "680억원(F)", sub: "다이와증권 추정", color: "#FF8C69" },
+              ].map((c, i) => (
+                <div key={i} className="card" style={{ padding: "16px 18px", borderTop: `2px solid ${c.color}` }}>
+                  <div style={{ fontSize: 10, color: "#555", fontFamily: "'IBM Plex Mono',monospace", letterSpacing: 1, marginBottom: 8 }}>{c.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 19, fontWeight: 700, color: c.color }}>{c.value}</div>
+                  <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>{c.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              {/* 향후 체크포인트 */}
+              <div className="card" style={{ padding: "20px 22px" }}>
+                <div style={{ fontSize: 12, color: "#E8C547", fontWeight: 600, marginBottom: 14 }}>📋 향후 주목 체크포인트</div>
+                {checkpoints.map((c, i) => {
+                  const done = !!checked[`cp${i}`];
+                  return (
+                    <div key={i} className="hover-row" onClick={() => toggle(`cp${i}`)}
+                      style={{ display: "flex", gap: 10, padding: "10px 10px", marginBottom: 4, alignItems: "flex-start" }}>
+                      <div style={{ width: 18, height: 18, flexShrink: 0, borderRadius: 5, border: done ? "2px solid #4EC9B0" : "2px solid #333", background: done ? "#4EC9B022" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                        {done && <svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4L3.5 6.5L9 1" stroke="#4EC9B0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, color: done ? "#555" : "#C0BDB4", textDecoration: done ? "line-through" : "none", marginBottom: 3 }}>{c.icon} {c.label}</div>
+                        <div style={{ fontSize: 11, color: "#555", lineHeight: 1.5 }}>{c.note}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 리스크 요인 */}
+              <div className="card" style={{ padding: "20px 22px", borderTop: "2px solid #FF8C69" }}>
+                <div style={{ fontSize: 12, color: "#FF8C69", fontWeight: 600, marginBottom: 14 }}>⚠️ 리스크 요인</div>
+                {risks.map((r, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, marginBottom: 12, paddingBottom: 12, borderBottom: i < risks.length - 1 ? "1px solid #1A1A1E" : "none" }}>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#FF8C69", marginTop: 6, flexShrink: 0 }} />
+                    <div style={{ fontSize: 13, color: "#A0A09A", lineHeight: 1.6 }}>{r}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 주가 이벤트 요약 */}
+            <div className="card" style={{ padding: "20px 22px", marginTop: 16 }}>
+              <div style={{ fontSize: 12, color: "#888", fontWeight: 500, marginBottom: 14 }}>📈 주요 주가 이벤트 (2024~2026)</div>
+              <div style={{ display: "flex", gap: 0, overflowX: "auto", paddingBottom: 4 }}>
+                {[
+                  { date: "2024.06", event: "LG전자 휴머노이드 협약", dir: "↑" },
+                  { date: "2024.10", event: "보스턴다이내믹스 700개 공급", dir: "↑" },
+                  { date: "2024.12", event: "자율주행 사업부 물적분할", dir: "↓" },
+                  { date: "2025.01", event: "피지컬 AI 테마 급등 시작", dir: "↑↑" },
+                  { date: "2025.05", event: "1Q25 흑자전환 발표", dir: "↑" },
+                  { date: "2025.11", event: "3Q25 누적 흑자전환 확인", dir: "↑" },
+                  { date: "2026.01", event: "최고가 349,500원 기록", dir: "▲" },
+                  { date: "2026.03", event: "현재 242,000원 (고점比 -31%)", dir: "↓" },
+                ].map((ev, i) => (
+                  <div key={i} style={{ flexShrink: 0, width: 120, padding: "10px 12px", marginRight: 8, background: "#0D0D10", borderRadius: 8, border: "1px solid #1E1E24" }}>
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: "#555", marginBottom: 6 }}>{ev.date}</div>
+                    <div style={{ fontSize: 11, color: "#B0ACA4", lineHeight: 1.5, marginBottom: 6 }}>{ev.event}</div>
+                    <div style={{ fontSize: 14, color: ev.dir.includes("↑") ? "#4EC9B0" : "#FF8C69" }}>{ev.dir}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ 1. 기업 개요 ══ */}
+        {tab === 1 && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>🏢 기업 개요</div>
+                <div style={{ fontSize: 13, color: "#B0ACA4", lineHeight: 1.9 }}>
+                  1999년 설립. 로봇전용 스마트 액추에이터 <span style={{ color: "#E8C547", fontWeight: 600 }}>다이나믹셀(DYNAMIXEL)</span> 제조를 주력으로 성장.
+                  2018년 코스닥 기술특례 상장. 글로벌 로봇 연구·대회 플랫폼 <span style={{ color: "#4EC9B0" }}>약 80%</span>에 채택.
+                  2024~2025년 피지컬 AI 워커, 로봇 손 등 신사업으로 확장. 2025년 코스닥 상장(2018년) 이후 첫 연간 흑자 전환 달성.
+                </div>
+                <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {[
+                    { k: "설립", v: "1999.04" }, { k: "대표", v: "김병수" },
+                    { k: "상장", v: "2018년 코스닥" }, { k: "임직원", v: "약 114명" },
+                    { k: "수출 비중", v: "약 70%+" }, { k: "미국법인", v: "ROBOTIS Inc." },
+                  ].map((d, i) => (
+                    <div key={i} style={{ background: "#0D0D10", borderRadius: 6, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 10, color: "#555", marginBottom: 3 }}>{d.k}</div>
+                      <div style={{ fontSize: 12, color: "#C0BDB4", fontWeight: 500 }}>{d.v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>🔗 주주 구성 & 주요 파트너</div>
+                {[
+                  { name: "김병수 외 특수관계인", pct: "23.85%", role: "최대주주", color: "#E8C547" },
+                  { name: "LG전자", pct: "6.60%", role: "2대주주 · 휴머노이드 협약", color: "#4EC9B0" },
+                  { name: "기타 소액주주", pct: "69.55%", role: "유동주식", color: "#555" },
+                ].map((s, i) => (
+                  <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < 2 ? "1px solid #1A1A1E" : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                      <span style={{ color: s.color, fontWeight: 600, fontSize: 13 }}>{s.name}</span>
+                      <span style={{ fontFamily: "'IBM Plex Mono',monospace", color: s.color, fontSize: 13 }}>{s.pct}</span>
+                    </div>
+                    <div style={{ background: "#1A1A1E", borderRadius: 3, height: 5, overflow: "hidden", marginBottom: 4 }}>
+                      <div style={{ width: s.pct, height: "100%", background: s.color, borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: "#555" }}>{s.role}</div>
+                  </div>
+                ))}
+                <div style={{ marginTop: 12, fontSize: 11, color: "#4EC9B0", background: "#0F1F18", borderRadius: 8, padding: "10px 12px", lineHeight: 1.7 }}>
+                  💡 2024.06 LG전자와 '휴머노이드 로봇 공동연구 및 사업화' 협약 체결. MIT 피지컬AI 공동연구, 보스턴다이내믹스·오픈AI 공급 협의 중.
+                </div>
+              </div>
+            </div>
+
+            {/* 제품 포트폴리오 */}
+            <div className="card" style={{ padding: "22px 24px" }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 16, fontWeight: 500 }}>🤖 제품 포트폴리오 (2026 기준)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+                {[
+                  { icon: "🔩", name: "DYNAMIXEL", sub: "X·P·Y 시리즈", status: "매출 98%", badge: "캐시카우", bc: "#E8C547", desc: "100여종 라인업. 보스턴다이내믹스 납품. 글로벌 표준." },
+                  { icon: "🦾", name: "AI 워커", sub: "피지컬 AI 세미 휴머노이드", status: "25년 출하 70대", badge: "신성장", bc: "#4EC9B0", desc: "오픈AI 공급 협의. 27년 1,000대 목표." },
+                  { icon: "🤲", name: "로봇 손", sub: "5F·20DoF 고정밀", status: "2026 양산", badge: "파이프라인", bc: "#7B9FFF", desc: "팔당 15kg 하중. 글로벌 빅테크 선주문." },
+                  { icon: "🚗", name: "GAEMI", sub: "실외 자율주행로봇", status: "RaaS 운영 중", badge: "RaaS", bc: "#FF8C69", desc: "운행안전인증 국내 1호. 배송·순찰 서비스." },
+                ].map((p, i) => (
+                  <div key={i} style={{ background: "#0D0D10", borderRadius: 10, padding: "14px 14px", border: `1px solid ${p.bc}22` }}>
+                    <div style={{ fontSize: 20, marginBottom: 8 }}>{p.icon}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: p.bc }}>{p.name}</span>
+                      <span style={{ background: `${p.bc}22`, color: p.bc, fontSize: 9, padding: "2px 6px", borderRadius: 4 }}>{p.badge}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#666", marginBottom: 8 }}>{p.sub}</div>
+                    <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: p.bc, marginBottom: 8 }}>{p.status}</div>
+                    <div style={{ fontSize: 11, color: "#666", lineHeight: 1.5 }}>{p.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ 4. 경쟁 분석 ══ */}
+        {tab === 4 && (
+          <div>
+
+            {/* ① 위협 경보 배너 */}
+            <div style={{ background: "linear-gradient(90deg,#FF444422,#FF8C6911)", border: "1px solid #FF444444", borderRadius: 10, padding: "14px 20px", marginBottom: 16, display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ fontSize: 24 }}>🚨</div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#FF6B6B", marginBottom: 4 }}>중국발 가격 파괴 위협 — 투자 핵심 리스크</div>
+                <div style={{ fontSize: 12, color: "#888", lineHeight: 1.7 }}>
+                  2025년 글로벌 휴머노이드 출하 1.6만대 중 <span style={{ color: "#FF8C69", fontWeight: 600 }}>중국산 80%+</span> 점유.
+                  유니트리 R1 <span style={{ color: "#FF8C69", fontWeight: 600 }}>$5,900</span> — 미국 경쟁사의 ⅛ 수준.
+                  다이나믹셀 연구·교육 시장 잠식 속도가 가장 큰 단기 위협.
+                </div>
+              </div>
+            </div>
+
+            {/* ② 글로벌 액추에이터 경쟁사 — 중국 업체 카드 */}
+            <div style={{ fontSize: 12, color: "#888", fontWeight: 600, marginBottom: 10, paddingLeft: 4 }}>🇨🇳 중국 액추에이터·휴머노이드 경쟁사 (핵심 위협)</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+              {chinaRivals.map((r, i) => (
+                <div key={i} className="card" style={{ padding: "16px 20px", borderLeft: `3px solid ${r.threatColor}`, display: "grid", gridTemplateColumns: "200px 1fr 1fr", gap: 20, alignItems: "start" }}>
+                  {/* 회사 기본 */}
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 16 }}>{r.country}</span>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "#E0DDD5" }}>{r.name}</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#555", marginBottom: 8 }}>{r.city}</div>
+                    <div style={{ display: "inline-block", background: `${r.threatColor}22`, color: r.threatColor, fontSize: 10, padding: "3px 10px", borderRadius: 4, fontFamily: "'IBM Plex Mono',monospace", fontWeight: 700 }}>
+                      위협도: {r.threat}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 11, color: "#666" }}>{r.product}</div>
+                    <div style={{ marginTop: 6, fontSize: 11, color: "#E8C547", fontFamily: "'IBM Plex Mono',monospace" }}>{r.price}</div>
+                  </div>
+                  {/* 출하·강점 */}
+                  <div>
+                    <div style={{ fontSize: 10, color: "#4EC9B0", marginBottom: 4, fontWeight: 600 }}>📦 출하 현황</div>
+                    <div style={{ fontSize: 11, color: "#888", lineHeight: 1.6, marginBottom: 10 }}>{r.shipment}</div>
+                    <div style={{ fontSize: 10, color: "#4EC9B0", marginBottom: 4, fontWeight: 600 }}>✅ 강점</div>
+                    <div style={{ fontSize: 11, color: "#888", lineHeight: 1.6 }}>{r.strength}</div>
+                  </div>
+                  {/* 약점·충돌 */}
+                  <div>
+                    <div style={{ fontSize: 10, color: "#FF8C69", marginBottom: 4, fontWeight: 600 }}>⚠️ 약점·한계</div>
+                    <div style={{ fontSize: 11, color: "#888", lineHeight: 1.6, marginBottom: 10 }}>{r.weakness}</div>
+                    <div style={{ fontSize: 10, color: r.threatColor, marginBottom: 4, fontWeight: 600 }}>🎯 로보티즈 충돌 영역</div>
+                    <div style={{ fontSize: 11, color: "#888", lineHeight: 1.6 }}>{r.overlap}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* ③ 레이더 + K-로봇 비교 */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 4, fontWeight: 500 }}>🕸️ 글로벌 경쟁력 비교 레이더</div>
+                <div style={{ fontSize: 10, color: "#444", marginBottom: 12 }}>* 각 축 100 = 해당 분야 최고 수준 추정치</div>
+                <ResponsiveContainer width="100%" height={230}>
+                  <RadarChart data={radarCompare}>
+                    <PolarGrid stroke="#222" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: "#666", fontSize: 10 }} />
+                    <Radar name="로보티즈" dataKey="robotis" stroke="#E8C547" fill="#E8C547" fillOpacity={0.25} />
+                    <Radar name="유니트리" dataKey="unitree" stroke="#FF4444" fill="#FF4444" fillOpacity={0.1} />
+                    <Radar name="아지봇"  dataKey="agibot"  stroke="#FF8C69" fill="#FF8C69" fillOpacity={0.08} />
+                    <Radar name="MAXON"   dataKey="maxon"   stroke="#4EC9B0" fill="#4EC9B0" fillOpacity={0.08} />
+                    <Tooltip contentStyle={{ background: "#1A1A1E", border: "1px solid #333", borderRadius: 8, fontSize: 11 }} />
+                  </RadarChart>
+                </ResponsiveContainer>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", marginTop: 8 }}>
+                  {[["#E8C547","로보티즈"],["#FF4444","유니트리"],["#FF8C69","아지봇"],["#4EC9B0","MAXON"]].map(([c,n],i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#666" }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: c }} />{n}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>⚔️ 로보티즈 차별화 포인트</div>
+                {[
+                  { title: "vs 유니트리·아지봇 (중국)", color: "#FF4444",
+                    win: "오픈소스 생태계 80% 점유, 글로벌 연구 표준, 미·EU 수출 규제 수혜",
+                    lose: "가격 경쟁력 (유니트리 대비 연구용 ASP 2~3배), 양산 규모" },
+                  { title: "vs MAXON·Faulhaber (유럽)", color: "#4EC9B0",
+                    win: "모듈형 설계·오픈소스·가격·피지컬AI 통합",
+                    lose: "초정밀 산업·방산·의료 인증 신뢰도" },
+                  { title: "vs 레인보우·두산 (국내)", color: "#7B9FFF",
+                    win: "유일한 흑자·부품 원천기술·LG·오픈AI 글로벌 파트너십",
+                    lose: "완성품 라인업 폭, 삼성·두산그룹 인프라·브랜드" },
+                ].map((p, i) => (
+                  <div key={i} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: i < 2 ? "1px solid #1A1A1E" : "none" }}>
+                    <div style={{ fontSize: 12, color: p.color, fontWeight: 600, marginBottom: 6 }}>{p.title}</div>
+                    <div style={{ fontSize: 11, color: "#666", lineHeight: 1.7 }}>
+                      <span style={{ color: "#4EC9B0" }}>✅ 우위:</span> {p.win}<br />
+                      <span style={{ color: "#FF8C69" }}>⚠️ 열위:</span> {p.lose}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ④ K-로봇 재무 비교 */}
+            <div className="card" style={{ padding: "22px 24px" }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>📊 K-로봇 빅4 재무 비교 (2025E)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 14 }}>
+                {compData.map((c, i) => (
+                  <div key={i} style={{ background: "#0D0D10", borderRadius: 10, padding: "14px 16px", border: `1px solid ${c.color}33` }}>
+                    <div style={{ fontSize: 10, color: "#555", fontFamily: "'IBM Plex Mono',monospace", marginBottom: 6 }}>{c.listed}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: c.color, marginBottom: 10 }}>{c.name}</div>
+                    {[["시총", `${c.cap}조`], ["매출(E)", `${c.rev25}억`], ["영업이익(E)", `${c.op25 > 0 ? "+" : ""}${c.op25}억`]].map(([k, v], j) => (
+                      <div key={j} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                        <span style={{ fontSize: 10, color: "#555" }}>{k}</span>
+                        <span style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: j === 2 ? (c.op25 > 0 ? "#4EC9B0" : "#FF8C69") : "#C0BDB4" }}>{v}</span>
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 8, fontSize: 10, background: `${c.color}15`, color: c.color, borderRadius: 4, padding: "3px 8px", textAlign: "center" }}>{c.backer}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: "#0F1F18", borderRadius: 8, padding: "10px 16px", fontSize: 12, color: "#4EC9B0", lineHeight: 1.7 }}>
+                💡 로보티즈는 K-로봇 4사 중 <strong>유일한 흑자 기업</strong>. 단, 진짜 위협은 국내 경쟁사가 아닌 중국 완성품 업체의 <strong>수직계열화 + 초저가</strong> 전략. 미·EU 수출 규제가 로보티즈의 최대 지정학적 해자.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ 3. 파이프라인 ══ */}
+        {tab === 3 && (
+          <div>
+
+            {/* ★ 1000억 유상증자 — 자금사용 계획 (2025.08.28 공시) */}
+            <div style={{ border: "1px solid #4EC9B066", borderRadius: 12, padding: "20px 24px", marginBottom: 18, background: "linear-gradient(135deg,#0A0D10,#0A120F)" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>📋</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#4EC9B0", marginBottom: 4 }}>1,000억 유상증자 자금사용 계획 — 공시 원문 기반 (2025.08.28)</div>
+                  <div style={{ fontSize: 12, color: "#666", lineHeight: 1.7 }}>
+                    <span style={{ color: "#E8C547", fontWeight: 600 }}>핵심 전략:</span> 피지컬 AI 시대의 두 가지 병목 — <strong style={{ color: "#E0DDD5" }}>가격경쟁력 있는 QDD 액추에이터</strong>와 <strong style={{ color: "#E0DDD5" }}>실세계 피지컬 데이터</strong> — 을 동시에 해결. 우즈베키스탄을 글로벌 생산·데이터 거점으로 구축.
+                  </div>
+                </div>
+              </div>
+
+              {/* 자금 구조 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                {/* 시설자금 600억 */}
+                <div style={{ background: "#0A0A0C", borderRadius: 8, padding: "16px 18px", border: "1px solid #4EC9B033" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#4EC9B0" }}>🏭 시설자금</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 14, fontWeight: 700, color: "#4EC9B0" }}>600억원</div>
+                  </div>
+                  {[
+                    { item: "우즈베키스탄 신공장 건설·인수", amt: "~480억", pct: 80, note: "시설자금의 약 80%. 타슈켄트 인근 2만평(6.6만㎡) 부지. 우즈벡 정부 국가전략사업 지정 + 세제혜택 확약." },
+                    { item: "정밀 가공시설 확충", amt: "350억", pct: 58, note: "생산 Capa 기존 대비 10배 이상 확대. 26년 하반기·28년 하반기 분할 투자." },
+                    { item: "모터 생산시설", amt: "75억", pct: 13, note: "모터 내재화율 제고. 중국 부품 의존 탈피의 핵심." },
+                    { item: "로봇 완제품 생산라인", amt: "150억", pct: 25, note: "AI 워커·휴머노이드 양산 대응." },
+                    { item: "데이터팩토리 구축", amt: "25억", pct: 4, note: "2025년 8월 우즈벡 1단계 운영 이미 개시. 시설 확장 투자." },
+                  ].map((r, i) => (
+                    <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: i < 4 ? "1px solid #1A1A1E" : "none" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: "#C0BDB4" }}>{r.item}</span>
+                        <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: "#4EC9B0" }}>{r.amt}</span>
+                      </div>
+                      <div style={{ background: "#1A1A1E", borderRadius: 3, height: 5, marginBottom: 4, overflow: "hidden" }}>
+                        <div style={{ width: `${r.pct}%`, height: "100%", background: "#4EC9B0", borderRadius: 3 }} />
+                      </div>
+                      <div style={{ fontSize: 10, color: "#555", lineHeight: 1.5 }}>{r.note}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 운영자금 400억 */}
+                <div style={{ background: "#0A0A0C", borderRadius: 8, padding: "16px 18px", border: "1px solid #E8C54733" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#E8C547" }}>⚙️ 운영자금</div>
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 14, fontWeight: 700, color: "#E8C547" }}>400억원</div>
+                  </div>
+                  {[
+                    { item: "QDD 액추에이터 R&D", amt: "120억", pct: 30, color: "#E8C547",
+                      note: "QDD(Quasi-Direct Drive): 기어비 낮춰 역구동성 극대화 → 강화학습 수용 최적 구조. 기존 DYNAMIXEL 대비 충격흡수·토크밀도 대폭 향상. 휴머노이드 관절 표준으로 부상." },
+                    { item: "자체 신규 모터 개발", amt: "120억", pct: 30, color: "#E8C547",
+                      note: "모터 자체 생산 → 핵심 원가 내재화. 중국산 모터 의존 탈피. 부품 공급망 리스크 해소." },
+                    { item: "데이터팩토리 운영비", amt: "60억", pct: 15, color: "#C084FC",
+                      note: "로봇 관제·Human-Robot Interaction 실세계 데이터 수집·가공. AI 파운데이션 모델 학습용 피지컬 데이터 양산." },
+                    { item: "정밀 가공·모터 운영비", amt: "100억", pct: 25, color: "#7B9FFF",
+                      note: "신규 생산 시설 가동 준비 인건비·재료비·유지보수비 선확보." },
+                  ].map((r, i) => (
+                    <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: i < 3 ? "1px solid #1A1A1E" : "none" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: "#C0BDB4" }}>{r.item}</span>
+                        <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: r.color }}>{r.amt}</span>
+                      </div>
+                      <div style={{ background: "#1A1A1E", borderRadius: 3, height: 5, marginBottom: 4, overflow: "hidden" }}>
+                        <div style={{ width: `${r.pct}%`, height: "100%", background: r.color, borderRadius: 3 }} />
+                      </div>
+                      <div style={{ fontSize: 10, color: "#555", lineHeight: 1.5 }}>{r.note}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* QDD 심층 설명 */}
+              <div style={{ background: "#0F1A0F", border: "1px solid #E8C54744", borderRadius: 8, padding: "14px 18px", marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#E8C547", marginBottom: 10 }}>🔩 QDD(준직접구동) — 왜 핵심인가</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                  {[
+                    { title: "기존 DYNAMIXEL 한계", color: "#FF8C69",
+                      body: "높은 감속비 → 역구동성 낮음 → 외부 충격 시 관절 파손 위험. 강화학습 기반 로봇이 필요한 '자연스러운 컴플라이언스' 구현 어려움." },
+                    { title: "QDD가 해결하는 것", color: "#4EC9B0",
+                      body: "저감속비(~10:1 이하) + 직접 토크 제어 → 역구동성 극대화. 충격흡수·힘 감지·자연스러운 관절 움직임. 강화학습 에이전트가 실제 로봇에서 학습 가능." },
+                    { title: "시장 포지셔닝", color: "#E8C547",
+                      body: "테슬라 옵티머스·Figure AI·1X 등 차세대 휴머노이드가 모두 QDD 기반으로 전환 중. 현재 선두 공급사는 중국업체. 로보티즈 QDD 양산 시 다이나믹셀 생태계 + QDD 기술의 결합으로 독보적 포지션." },
+                  ].map((q, i) => (
+                    <div key={i} style={{ background: "#0A0A0C", borderRadius: 6, padding: "10px 12px" }}>
+                      <div style={{ fontSize: 11, color: q.color, fontWeight: 600, marginBottom: 6 }}>{q.title}</div>
+                      <div style={{ fontSize: 11, color: "#777", lineHeight: 1.7 }}>{q.body}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 우즈벡 데이터팩토리 */}
+              <div style={{ background: "#0A0A14", border: "1px solid #7B9FFF44", borderRadius: 8, padding: "14px 18px", marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#7B9FFF", marginBottom: 10 }}>🌍 우즈베키스탄 데이터팩토리 — 단순 공장이 아닌 피지컬 AI 데이터 생산기지</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#4EC9B0", fontWeight: 600, marginBottom: 6 }}>전략적 선택 배경</div>
+                    {[
+                      "2025년 8월 이미 1단계 운영 개시 (공시 이전 선행 투자)",
+                      "우즈벡 경제부총리 직접 지원 — 국가전략사업 지정",
+                      "2만평(6.6만㎡) 부지 + 세제혜택·인프라 지원 즉시 집행 약속",
+                      "중국 대비 저렴한 인건비 + 자동차 산업 기반 제조 인프라",
+                      "미·중 무역갈등 지정학 리스크 완전 회피 가능 위치",
+                    ].map((t, i) => (
+                      <div key={i} style={{ display: "flex", gap: 7, marginBottom: 5, fontSize: 11, color: "#777", lineHeight: 1.5 }}>
+                        <span style={{ color: "#4EC9B0", flexShrink: 0 }}>•</span>{t}
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#C084FC", fontWeight: 600, marginBottom: 6 }}>데이터팩토리가 만드는 것</div>
+                    {[
+                      "로봇 관제 + Human-Robot Interaction 실세계 데이터 대규모 수집",
+                      "AI 파운데이션 모델 학습용 피지컬 데이터 양산 (텍스트 데이터 → 행동 데이터)",
+                      "하드웨어 제조사 → 데이터 기반 AI 기업으로 사업모델 전환 신호",
+                      "2026년 288억 투입 (데이터팩토리·가공·모터 시설), 2028년 2차 투자",
+                    ].map((t, i) => (
+                      <div key={i} style={{ display: "flex", gap: 7, marginBottom: 5, fontSize: 11, color: "#777", lineHeight: 1.5 }}>
+                        <span style={{ color: "#C084FC", flexShrink: 0 }}>•</span>{t}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 투자 일정 + 생산 Capa 목표 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ background: "#0A0A0C", borderRadius: 8, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 11, color: "#888", fontWeight: 600, marginBottom: 8 }}>📅 투자 집행 일정</div>
+                  {[
+                    { period: "2025 8월", desc: "우즈벡 데이터팩토리 1단계 운영 개시", color: "#4EC9B0" },
+                    { period: "2025 12월", desc: "유상증자 신주 상장 완료", color: "#4EC9B0" },
+                    { period: "2026 상반기", desc: "우즈벡 공장 인수/신설 여부 확정", color: "#E8C547" },
+                    { period: "2026 하반기", desc: "288억 1차 집행 — 데이터팩토리·정밀가공·모터 시설", color: "#E8C547" },
+                    { period: "2028 하반기", desc: "2차 집행 — 정밀가공 시설 추가 확충", color: "#7B9FFF" },
+                  ].map((ev, i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, marginBottom: 7, alignItems: "flex-start" }}>
+                      <div style={{ flexShrink: 0, background: `${ev.color}22`, color: ev.color, borderRadius: 4, padding: "2px 7px", fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap" }}>{ev.period}</div>
+                      <div style={{ fontSize: 11, color: "#777", lineHeight: 1.5 }}>{ev.desc}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: "#0A0A0C", borderRadius: 8, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 11, color: "#888", fontWeight: 600, marginBottom: 8 }}>🎯 액추에이터 생산 Capa 목표</div>
+                  {[
+                    { label: "현재 (2025)", val: "연 30만대", pct: 10, color: "#FF8C69" },
+                    { label: "2027 목표", val: "연 210~300만대", pct: 70, color: "#E8C547" },
+                    { label: "배율", val: "7배 이상 확대", pct: 100, color: "#4EC9B0" },
+                  ].map((c, i) => (
+                    <div key={i} style={{ marginBottom: 12 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: "#888" }}>{c.label}</span>
+                        <span style={{ fontSize: 12, color: c.color, fontFamily: "'IBM Plex Mono',monospace", fontWeight: 600 }}>{c.val}</span>
+                      </div>
+                      <div style={{ background: "#1A1A1E", borderRadius: 3, height: 6, overflow: "hidden" }}>
+                        <div style={{ width: `${c.pct}%`, height: "100%", background: c.color, borderRadius: 3 }} />
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#555", lineHeight: 1.6, borderTop: "1px solid #1A1A1E", paddingTop: 8 }}>
+                    ⚠️ 주주서한: 제3자 배정 대신 주주배정 공모 선택 — 특정 업체 종속 방지 의도. 빅테크 협력은 별도 지속.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ★ 테슬라 옵티머스 공급 시나리오 — 핵심 카탈리스트 */}
+            <div style={{ border: "1px solid #E8C54766", borderRadius: 12, padding: "20px 24px", marginBottom: 18, background: "linear-gradient(135deg,#0D0D10,#12100A)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <span style={{ fontSize: 22 }}>⚡</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#E8C547" }}>테슬라 옵티머스 액추에이터 공급 — 파이프라인 최대 카탈리스트</div>
+                  <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>확정 시 로보티즈 밸류에이션 전면 재정의 수준. 현재 협의 여부 미공개.</div>
+                </div>
+              </div>
+
+              {/* 현황 팩트 박스 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {[
+                  { icon: "🤖", title: "옵티머스 액추에이터 구조", color: "#7B9FFF",
+                    body: "28개 자체 설계 액추에이터 탑재. 하체 구동계가 원가의 약 25% 차지. 테슬라는 핵심 부품 내재화 지향." },
+                  { icon: "🇨🇳", title: "현재 주요 공급사", color: "#FF8C69",
+                    body: "산화 인텔리전트 컨트롤스(중국)에 약 9,460억원($6.85억) 규모 리니어 액추에이터 발주 (2025.10 보도). 18만대분 추정." },
+                  { icon: "⚠️", title: "생산 지연 리스크", color: "#FF4444",
+                    body: "2025년 목표 5,000대 → 2,000대 → 실제 수백대 수준 달성. 로봇 손 정밀제어 기술이 최대 병목. 2026년 대량양산 불투명." },
+                ].map((f, i) => (
+                  <div key={i} style={{ background: "#0A0A0C", borderRadius: 8, padding: "14px 16px", border: `1px solid ${f.color}33` }}>
+                    <div style={{ fontSize: 16, marginBottom: 6 }}>{f.icon}</div>
+                    <div style={{ fontSize: 11, color: f.color, fontWeight: 600, marginBottom: 6 }}>{f.title}</div>
+                    <div style={{ fontSize: 11, color: "#777", lineHeight: 1.7 }}>{f.body}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 시나리오 3종 */}
+              <div style={{ fontSize: 12, color: "#888", fontWeight: 600, marginBottom: 10 }}>📋 로보티즈 공급 시나리오 분석</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                {[
+                  {
+                    label: "베스트 케이스", icon: "🚀", prob: "15%", color: "#4EC9B0",
+                    title: "다이나믹셀 Y 시리즈 / 로봇 손 액추에이터 공급 확정",
+                    cond: "테슬라가 중국산 의존 탈피를 위해 한국 대안 채택. 미·중 무역전쟁 심화 시 가속.",
+                    impact: "연간 수천억원 규모 B2B 계약. PSR 리레이팅 완전 정당화. 주가 재급등 트리거.",
+                    timeline: "2026 하반기~2027",
+                  },
+                  {
+                    label: "베이스 케이스", icon: "🔬", prob: "45%", color: "#E8C547",
+                    title: "R&D·소량 납품 → 검증 단계",
+                    cond: "보스턴다이내믹스 납품 레퍼런스 활용, 테슬라 엔지니어링 팀에 샘플 공급. 공식 공급사 지위 미획득.",
+                    impact: "직접 매출 미미. 단, 공급사 등록 자체가 주가 모멘텀. 2027년 이후 확대 기대감 유지.",
+                    timeline: "2026년 내",
+                  },
+                  {
+                    label: "베어 케이스", icon: "❌", prob: "40%", color: "#FF8C69",
+                    title: "테슬라 완전 내재화 — 공급 불발",
+                    cond: "테슬라가 자체 액추에이터 수직계열화 완성. 산화·중국 공급망 유지. 로보티즈 접근 기회 없음.",
+                    impact: "옵티머스 카탈리스트 소멸. 현재 PSR 87배 정당화 근거 약화. 주가 조정 압력.",
+                    timeline: "옵티머스 V3 공개 (26년 1Q) 후 윤곽",
+                  },
+                ].map((s, i) => (
+                  <div key={i} style={{ background: "#0A0A0C", borderRadius: 8, padding: "14px 16px", border: `1px solid ${s.color}44` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: s.color }}>{s.icon} {s.label}</span>
+                      <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, background: `${s.color}22`, color: s.color, padding: "2px 8px", borderRadius: 4 }}>P≈{s.prob}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#C0BDB4", fontWeight: 600, marginBottom: 8, lineHeight: 1.5 }}>{s.title}</div>
+                    <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 8 }}><span style={{ color: "#888" }}>조건:</span> {s.cond}</div>
+                    <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 6 }}><span style={{ color: s.color }}>임팩트:</span> {s.impact}</div>
+                    <div style={{ fontSize: 10, color: "#444", fontFamily: "'IBM Plex Mono',monospace" }}>⏱ {s.timeline}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 핵심 관전 포인트 */}
+              <div style={{ background: "#0F1B0F", border: "1px solid #4EC9B033", borderRadius: 8, padding: "12px 16px" }}>
+                <div style={{ fontSize: 12, color: "#4EC9B0", fontWeight: 700, marginBottom: 8 }}>🎯 투자자가 봐야 할 체크포인트 (우선순위순)</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {[
+                    ["2026 Q2", "테슬라 2Q26 실적 발표 — 옵티머스 생산 가이던스 (업계 기준치 형성)"],
+                    ["2026 Q1", "옵티머스 V3 공개 (머스크 예고) — 액추에이터 공급사 명단 노출 여부"],
+                    ["상시 모니터", "미·중 관세 강화 → 중국 부품 의존도 탈피 수혜 속도"],
+                    ["2025 실적", "로보티즈 보스턴다이내믹스 납품 지속 여부 (신뢰 레퍼런스)"],
+                  ].map(([t, d], i) => (
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <div style={{ flexShrink: 0, background: "#4EC9B022", color: "#4EC9B0", borderRadius: 4, padding: "2px 8px", fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap", marginTop: 1 }}>{t}</div>
+                      <div style={{ fontSize: 11, color: "#777", lineHeight: 1.6 }}>{d}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 10, fontSize: 11, color: "#555", borderTop: "1px solid #1A2A1A", paddingTop: 8 }}>
+                  ⚠️ 본 시나리오는 공개 정보 기반 추정이며 로보티즈-테슬라 간 공식 계약 여부는 미확인입니다. Claude는 금융 전문가가 아닙니다.
+                </div>
+              </div>
+            </div>
+
+            {/* ★ 미국 내 중국산 로봇 부품 규제 팩트체크 */}
+            <div style={{ border: "1px solid #7B9FFF55", borderRadius: 12, padding: "20px 24px", marginBottom: 18, background: "linear-gradient(135deg,#0D0D10,#0A0A14)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <span style={{ fontSize: 22 }}>⚖️</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#7B9FFF" }}>팩트체크: 미국 내 중국산 로봇 부품 규제 현황 (2026.03 기준)</div>
+                  <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>규제 강화는 로보티즈의 지정학적 해자 — 단, 현재는 "조사 중" 단계임에 주의</div>
+                </div>
+              </div>
+
+              {/* 규제 레이어 4종 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                {[
+                  {
+                    layer: "① 섹션 232 조사 (핵심)", status: "조사 진행 중", statusColor: "#E8C547",
+                    icon: "🔍",
+                    body: "2025년 9월 2일 미 상무부, 로봇·산업기계 및 부품·구성품 수입의 안보 영향 조사 개시. 로봇 전체(액추에이터·모터·CNC 등 포함) 포괄. 조사 기간 최대 270일 → 2026년 5월 30일까지 보고서 제출 기한. 이후 대통령이 90일 내 관세·쿼터 등 조치 결정.",
+                    impact: "결정 시 중국산 로봇 부품에 고관세 부과 가능. 기존 Section 301 관세(25%)에 추가 중첩 적용.",
+                    robotis: "🟢 수혜: 한국산은 KORUS FTA 적용으로 우대 가능성. Business Roundtable 의견서에서 한국·일본·EU 등 우방국 제품 예외 적용 권고.",
+                  },
+                  {
+                    layer: "② 휴머노이드 로봇법 (S.3275)", status: "법안 발의 (미통과)", statusColor: "#FF8C69",
+                    icon: "🏛️",
+                    body: "2025년 초 미 상원 발의. 연방 정부가 중국·이란·북한·러시아 군사 공급업체 제품 포함 AI 탑재 휴머노이드를 구매하는 것을 금지. 현재 위원회 심의 중, 민간 판매 제한은 미포함.",
+                    impact: "연방 정부 조달 차단. 민간 시장 직접 규제는 아직 없음. 단, 법안 자체가 산업계 분위기 형성.",
+                    robotis: "🟢 간접 수혜: 중국산 휴머노이드 연방 조달 금지 → 미국 정부 파트너 수요에서 한국산 부각.",
+                  },
+                  {
+                    layer: "③ 기존 관세 누적 (현행)", status: "즉시 적용 중", statusColor: "#FF4444",
+                    icon: "💸",
+                    body: "Section 301: 중국산 로봇·부품에 25% 관세 (트럼프 1기부터). 2025년 추가 상호관세 145% 부과(90일 유예 후 협상 중). 현재 중국산 로봇 부품의 실효 관세율은 상황에 따라 수십~100%+. 중국 희토류 수출 규제 맞대응으로 공급망 리스크도 추가.",
+                    impact: "중국산 액추에이터·모터 가격 경쟁력 이미 크게 훼손. 테슬라가 중국 공급사 의존 탈피 검토 배경.",
+                    robotis: "🟢 직접 수혜: 한국산 DYNAMIXEL·로봇 손은 KORUS FTA로 대미 수출 관세 0%. 가격 경쟁력 역전 구간.",
+                  },
+                  {
+                    layer: "④ 오픈AI RFP·민간 탈중국화", status: "진행 중", statusColor: "#4EC9B0",
+                    icon: "📋",
+                    body: "2026년 1월 오픈AI, 베어링·모터·액추에이터 미국 기반 공급업체 RFP 공개 발송. '선전(深圳) 공급망에서 벗어나고 싶다'는 명확한 신호. 중국 공급업체들은 미국 내 합작공장 건설로 우회 시도 중.",
+                    impact: "민간 시장에서 자발적 탈중국화 가속. 규제 없이도 수요 구조 변화 진행 중.",
+                    robotis: "🟢 직접 수혜: 미국 기반 공급업체 우선 발주 수요에서 한국 ROBOTIS Inc.(미국 법인) 대응 가능.",
+                  },
+                ].map((r, i) => (
+                  <div key={i} style={{ background: "#0A0A0C", borderRadius: 8, padding: "14px 16px", border: `1px solid ${r.statusColor}33` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#C0BDB4" }}>{r.icon} {r.layer}</div>
+                      <div style={{ flexShrink: 0, background: `${r.statusColor}22`, color: r.statusColor, fontSize: 9, padding: "3px 8px", borderRadius: 4, fontFamily: "'IBM Plex Mono',monospace", fontWeight: 700 }}>{r.status}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#777", lineHeight: 1.7, marginBottom: 8 }}>{r.body}</div>
+                    <div style={{ fontSize: 11, color: "#888", lineHeight: 1.6, marginBottom: 6, paddingLeft: 8, borderLeft: "2px solid #333" }}>
+                      <span style={{ color: "#aaa" }}>임팩트: </span>{r.impact}
+                    </div>
+                    <div style={{ fontSize: 11, lineHeight: 1.6, color: "#4EC9B0", background: "#0F1F1888", borderRadius: 6, padding: "6px 10px" }}>{r.robotis}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 결론 요약 */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ background: "#0F1F18", border: "1px solid #4EC9B033", borderRadius: 8, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 12, color: "#4EC9B0", fontWeight: 700, marginBottom: 8 }}>✅ 로보티즈에 유리한 팩트</div>
+                  {[
+                    "KORUS FTA → 대미 수출 관세 0% (중국산 25~145% 대비 압도적 우위)",
+                    "Section 232 결과 발표 시 한국 등 우방국 예외 적용 가능성 高",
+                    "유니트리 등 중국 주요 업체, 인민해방군 연계로 연방 조달 원천 차단 대상",
+                    "미국 법인 ROBOTIS Inc. 보유 → '미국 기반 공급업체' 자격 충족",
+                    "오픈AI RFP가 명시적으로 미국·동맹국 공급망 우선 요청",
+                  ].map((f, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 11, color: "#888", lineHeight: 1.5 }}>
+                      <span style={{ color: "#4EC9B0", flexShrink: 0 }}>•</span>{f}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: "#1F0F0F", border: "1px solid #FF8C6933", borderRadius: 8, padding: "12px 16px" }}>
+                  <div style={{ fontSize: 12, color: "#FF8C69", fontWeight: 700, marginBottom: 8 }}>⚠️ 주의해야 할 팩트</div>
+                  {[
+                    "Section 232 조사 결과는 2026년 5~6월 이후 — 아직 확정 관세 없음",
+                    "중국 공급업체들이 미국 내 합작공장 건설로 규제 우회 적극 추진 중",
+                    "테슬라는 현재도 중국산 산화 액추에이터 발주 지속 (규제 시행 전)",
+                    "민간 판매 직접 규제는 아직 없음 — 연방 조달 제한만 법제화 시도",
+                    "관세 부과 시 테슬라·Figure AI 등의 원가 압박으로 로봇 수요 전반 위축 가능성",
+                  ].map((f, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, marginBottom: 5, fontSize: 11, color: "#888", lineHeight: 1.5 }}>
+                      <span style={{ color: "#FF8C69", flexShrink: 0 }}>•</span>{f}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 11, color: "#444", lineHeight: 1.6 }}>
+                ⚠️ 본 섹션은 공개된 미국 정부 문서(Federal Register, BIS), 의회 법안(S.3275), 업계 단체 의견서(Business Roundtable, U.S. Chamber) 기반 팩트 정리입니다. 최종 규제 내용은 변경될 수 있으며 법률·투자 전문가 확인을 권장합니다.
+              </div>
+            </div>
+
+            {/* 로드맵 타임라인 */}
+            <div className="card" style={{ padding: "22px 24px", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 16, fontWeight: 500 }}>🗓️ 제품 로드맵 타임라인</div>
+              <div style={{ display: "flex", gap: 0, overflowX: "auto", paddingBottom: 8 }}>
+                {roadmap.map((r, i) => (
+                  <div key={i} style={{ flex: "0 0 180px", position: "relative" }}>
+                    {/* 연결선 */}
+                    {i < roadmap.length - 1 && (
+                      <div style={{ position: "absolute", top: 20, right: 0, width: "100%", height: 2, background: "linear-gradient(90deg,#E8C547,#4EC9B0)", zIndex: 0 }} />
+                    )}
+                    <div style={{ position: "relative", zIndex: 1, marginRight: 16 }}>
+                      <div style={{ background: i === 2 ? "#E8C547" : "#1A1A1E", border: `2px solid ${i === 2 ? "#E8C547" : "#333"}`, borderRadius: 8, padding: "12px 14px" }}>
+                        <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, fontWeight: 700, color: i === 2 ? "#0A0A0C" : "#E8C547", marginBottom: 10 }}>{r.period} {i === 2 ? "◀ 현재" : ""}</div>
+                        {r.events.map((ev, j) => (
+                          <div key={j} style={{ fontSize: 11, color: i === 2 ? "#0A0A0C" : "#888", lineHeight: 1.6, marginBottom: 4, paddingLeft: 8, borderLeft: `2px solid ${i === 2 ? "#0A0A0C44" : "#333"}` }}>{ev}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 파이프라인 카드 */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {pipelineItems.map((p, i) => {
+                const done = !!checked[`pl${i}`];
+                return (
+                  <div key={i} className="card hover-row" onClick={() => toggle(`pl${i}`)}
+                    style={{ padding: "18px 22px", borderLeft: `3px solid ${p.stageColor}`, display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 16, alignItems: "start" }}>
+                    {/* 체크박스 */}
+                    <div style={{ width: 22, height: 22, flexShrink: 0, borderRadius: 6, border: done ? `2px solid ${p.stageColor}` : "2px solid #333", background: done ? `${p.stageColor}22` : "transparent", display: "flex", alignItems: "center", justifyContent: "center", marginTop: 2 }}>
+                      {done && <svg width="12" height="9" viewBox="0 0 12 9"><path d="M1 4L4.5 7.5L11 1" stroke={p.stageColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+
+                    {/* 본문 */}
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                        <span style={{ fontSize: 18 }}>{p.icon}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: done ? "#555" : "#E0DDD5" }}>{p.product}</span>
+                        <span style={{ background: `${p.stageColor}22`, color: p.stageColor, fontSize: 10, padding: "2px 8px", borderRadius: 4, fontFamily: "'IBM Plex Mono',monospace" }}>{p.stage}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: done ? "#444" : "#888", lineHeight: 1.7, marginBottom: 8 }}>{p.detail}</div>
+                      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 11, color: "#4EC9B0" }}>🎯 {p.target}</div>
+                        <div style={{ fontSize: 11, color: "#E8C547" }}>💰 {p.rev}</div>
+                        <div style={{ fontSize: 11, color: "#FF8C69" }}>⚠️ {p.risk}</div>
+                      </div>
+                    </div>
+
+                    {/* 완료 표시 */}
+                    {done && <div style={{ fontSize: 10, color: p.stageColor, fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap" }}>REVIEWED ✓</div>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 매출 시나리오 */}
+            <div className="card" style={{ padding: "22px 24px", marginTop: 16 }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>📈 파이프라인 기반 매출 시나리오 (다이와증권 추정)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                {[
+                  { scenario: "베이스", color: "#4EC9B0", items: [["26F 매출", "680억"], ["27F 매출", "1,600억"], ["전제", "AI워커 순조로운 양산"]] },
+                  { scenario: "불 케이스", color: "#E8C547", items: [["26F 매출", "900억+"], ["27F 매출", "2,000억+"], ["전제", "빅테크 대규모 발주 확정"]] },
+                  { scenario: "베어 케이스", color: "#FF8C69", items: [["26F 매출", "500억"], ["27F 매출", "900억"], ["전제", "양산 지연·경쟁 심화"]] },
+                ].map((s, i) => (
+                  <div key={i} style={{ background: "#0D0D10", borderRadius: 10, padding: "14px 16px", border: `1px solid ${s.color}33` }}>
+                    <div style={{ fontSize: 11, color: s.color, fontWeight: 700, marginBottom: 10, fontFamily: "'IBM Plex Mono',monospace" }}>{s.scenario.toUpperCase()}</div>
+                    {s.items.map(([k, v], j) => (
+                      <div key={j} style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, color: "#555" }}>{k}</span>
+                        <span style={{ fontSize: 11, color: j < 2 ? s.color : "#666", fontFamily: j < 2 ? "'IBM Plex Mono',monospace" : "inherit" }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 14, fontSize: 11, color: "#555", lineHeight: 1.7 }}>
+                ⚠️ 본 시나리오는 다이와증권 및 공개 자료 기반 추정치이며 실제 실적과 다를 수 있습니다. Claude는 금융 전문가가 아닙니다.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ 2. 마켓 포지셔닝 ══ */}
+        {tab === 2 && (
+          <div>
+
+            {/* 핵심 테제 */}
+            <div style={{ background: "linear-gradient(135deg,#12100A,#0A0D12)", border: "1px solid #E8C54755", borderRadius: 12, padding: "18px 24px", marginBottom: 16, display: "flex", gap: 16, alignItems: "flex-start" }}>
+              <div style={{ fontSize: 28, flexShrink: 0 }}>⚙️</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#E8C547", marginBottom: 6 }}>로보티즈 = 부품사가 아닌 <span style={{ color: "#4EC9B0" }}>프로토콜 오너</span></div>
+                <div style={{ fontSize: 13, color: "#999", lineHeight: 1.8 }}>
+                  일반 부품 OEM은 스펙을 납품하지만, 로보티즈는 <strong style={{ color: "#E0DDD5" }}>다중 액추에이터 제어 프로토콜(DYNAMIXEL Protocol 1.0/2.0)을 25년간 독자 빌드업</strong>해왔습니다.
+                  C·C++·Python·MATLAB·LabVIEW·ROS2 전 레이어를 커버하는 SDK, 100여 종 모델 간 완전 상호호환,
+                  전 세계 1,000+ 연구기관에 쌓인 <strong style={{ color: "#4EC9B0" }}>실전 B2B 협업 레퍼런스</strong> — 이것이 중국 저가 업체가 단기 복제할 수 없는 진짜 해자입니다.
+                  <strong style={{ color: "#E8C547" }}> 모듈형 채택률이 투자 테제의 핵심 변수</strong>인 이유가 여기 있습니다.
+                </div>
+              </div>
+            </div>
+
+            {/* 프로토콜 오너 해자 분석 */}
+            <div className="card" style={{ padding: "20px 24px", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888", fontWeight: 600, marginBottom: 14 }}>🔐 일반 부품사 vs 로보티즈 — 해자의 본질적 차이</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                {[
+                  {
+                    title: "① 프로토콜 IP + 지속 업그레이드", icon: "📡", color: "#E8C547",
+                    generic: "단일 모터 spec 납품. 제어 로직은 고객 자체 개발. 경쟁사가 동일 스펙으로 복제 가능.",
+                    robotis: "DYNAMIXEL Protocol 1.0→2.0을 25년간 독자 개발·진화. 패킷 구조·Control Table·Instruction Set 전체가 로보티즈 IP. DYNAMIXEL 브랜드 자체가 글로벌 등록 상표. 프로토콜이 업그레이드될수록 경쟁사와의 기술 격차는 누적 확대.",
+                    moat: "프로토콜을 복제해도 25년간 축적된 100여 종 모델 간 호환성·검증 데이터·커뮤니티 레퍼런스는 복제 불가. 경쟁사가 따라잡으려면 처음부터 생태계를 재건해야 함.",
+                  },
+                  {
+                    title: "② 풀스택 SDK 생태계", icon: "🛠️", color: "#4EC9B0",
+                    generic: "데이터시트·드라이버 제공이 전부.",
+                    robotis: "C/C++/Python/C#/Java/MATLAB/LabVIEW + ROS2 공식 패키지. apt-get 한 줄로 설치. GitHub Stars 1,400+. 커뮤니티 생태계 자생적 확장.",
+                    moat: "연구자·개발자가 '처음 배우는 로봇 하드웨어'가 DYNAMIXEL → 경력 전반에 걸친 브랜드 충성도 형성",
+                  },
+                  {
+                    title: "③ 25년 B2B 레퍼런스", icon: "🤝", color: "#7B9FFF",
+                    generic: "납품 이력 = 스펙 충족 증명.",
+                    robotis: "보스턴다이내믹스(뉴 아틀라스 700개+), 오픈AI(AI 워커·로봇 손 R&D), MIT(피지컬AI 공동개발), DARPA 경진대회, RoboCup 팀 다수.",
+                    moat: "세계 최고 기관과의 공동개발 이력 = 신규 고객의 기술 검증 비용 제로. '보스턴다이내믹스가 쓰는 액추에이터' 한 문장으로 설명 완료",
+                  },
+                ].map((d, i) => (
+                  <div key={i} style={{ background: "#0A0A0C", borderRadius: 8, padding: "14px 16px", border: `1px solid ${d.color}33` }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: d.color, marginBottom: 10 }}>{d.icon} {d.title}</div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, color: "#FF8C69", fontWeight: 600, marginBottom: 4 }}>일반 부품사</div>
+                      <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6 }}>{d.generic}</div>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, color: "#4EC9B0", fontWeight: 600, marginBottom: 4 }}>로보티즈</div>
+                      <div style={{ fontSize: 11, color: "#999", lineHeight: 1.6 }}>{d.robotis}</div>
+                    </div>
+                    <div style={{ background: `${d.color}11`, border: `1px solid ${d.color}33`, borderRadius: 6, padding: "7px 10px" }}>
+                      <div style={{ fontSize: 10, color: d.color, fontWeight: 600, marginBottom: 3 }}>해자(Moat)</div>
+                      <div style={{ fontSize: 11, color: "#888", lineHeight: 1.6 }}>{d.moat}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* SDK 지원 언어·플랫폼 시각화 */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "20px 22px" }}>
+                <div style={{ fontSize: 12, color: "#888", fontWeight: 500, marginBottom: 12 }}>🌐 DYNAMIXEL SDK — 지원 레이어 전체 맵</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    { layer: "피지컬AI 프레임워크", items: ["Isaac Lab", "MuJoCo", "Genesis", "IsaacGym"], color: "#C084FC" },
+                    { layer: "미들웨어", items: ["ROS2 Humble/Jazzy/Rolling", "ros2_control", "MoveIt2"], color: "#7B9FFF" },
+                    { layer: "언어 SDK", items: ["C/C++", "Python 2·3", "C#", "Java", "MATLAB", "LabVIEW"], color: "#4EC9B0" },
+                    { layer: "OS·플랫폼", items: ["Linux (ARM·x86)", "Windows", "macOS", "NVIDIA Jetson"], color: "#E8C547" },
+                    { layer: "하드웨어 인터페이스", items: ["U2D2", "USB2DYNAMIXEL", "DYNAMIXEL Shield (Arduino)"], color: "#FF8C69" },
+                  ].map((l, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <div style={{ flexShrink: 0, width: 120, fontSize: 10, color: l.color, fontWeight: 600, paddingTop: 3 }}>{l.layer}</div>
+                      <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {l.items.map((it, j) => (
+                          <span key={j} style={{ fontSize: 10, background: `${l.color}18`, color: l.color, borderRadius: 4, padding: "2px 7px" }}>{it}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 12, fontSize: 11, color: "#555", lineHeight: 1.6, borderTop: "1px solid #1A1A1E", paddingTop: 10 }}>
+                  💡 피지컬 AI 시뮬레이터(Isaac Lab·MuJoCo)에서 학습한 정책이 <strong style={{ color: "#E0DDD5" }}>그대로 DYNAMIXEL 하드웨어에서 실행</strong>됩니다. Sim-to-Real 갭이 가장 좁은 액추에이터.
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "20px 22px" }}>
+                <div style={{ fontSize: 12, color: "#888", fontWeight: 500, marginBottom: 12 }}>🏆 글로벌 B2B 레퍼런스 맵</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    { cat: "빅테크·AI 랩", color: "#E8C547", refs: [
+                      { name: "오픈AI", detail: "AI 워커·로봇 손 HX5 R&D 납품, 공급 협의 진행" },
+                      { name: "보스턴다이내믹스", detail: "뉴 아틀라스 액추에이터 700개+ 공급 (현재도 지속)" },
+                    ]},
+                    { cat: "대학·연구기관", color: "#4EC9B0", refs: [
+                      { name: "MIT (CSAIL)", detail: "피지컬 AI 리더-팔로워 모방학습 공동개발" },
+                      { name: "전 세계 1,000+ 연구기관", detail: "글로벌 로봇 연구·교육 플랫폼 80%+ 채택" },
+                    ]},
+                    { cat: "국내 전략 파트너", color: "#7B9FFF", refs: [
+                      { name: "LG전자 (2대주주)", detail: "휴머노이드 공동연구 협약. 90억 유상증자." },
+                      { name: "K-휴머노이드 연합", detail: "투모로 로보틱스·서울대 MOU. 한국 표준 주도." },
+                    ]},
+                    { cat: "경진대회·표준화", color: "#FF8C69", refs: [
+                      { name: "DARPA Robotics Challenge", detail: "참가팀 다수 DYNAMIXEL 기반 플랫폼 사용" },
+                      { name: "RoboCup·ICRA", detail: "Humanoid·교육 리그 공식 채택 플랫폼" },
+                    ]},
+                  ].map((g, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: 10, color: g.color, fontWeight: 700, marginBottom: 4 }}>{g.cat}</div>
+                      {g.refs.map((r, j) => (
+                        <div key={j} style={{ display: "flex", gap: 8, marginBottom: 4, paddingLeft: 8, borderLeft: `2px solid ${g.color}44` }}>
+                          <span style={{ fontSize: 11, color: "#C0BDB4", fontWeight: 500, flexShrink: 0, minWidth: 100 }}>{r.name}</span>
+                          <span style={{ fontSize: 11, color: "#666" }}>{r.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: "#888", fontWeight: 600, marginBottom: 10, paddingLeft: 4 }}>📊 프로토콜 오너의 시장 구도 — 모듈형 vs 수직계열화 채택률</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+              {actuatorApproach.map((a, i) => (
+                <div key={i} className="card" style={{ padding: "20px 22px", borderTop: `3px solid ${a.color}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: a.color, marginBottom: 4 }}>{a.type}</div>
+                      <div style={{ fontSize: 11, color: "#666" }}>{a.champion}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 10, color: "#555", marginBottom: 3 }}>현재 점유(추정)</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: a.color, fontFamily: "'IBM Plex Mono',monospace" }}>{a.share25}%</div>
+                    </div>
+                  </div>
+                  <div style={{ background: "#0D0D10", borderRadius: 6, height: 8, marginBottom: 14, overflow: "hidden" }}>
+                    <div style={{ width: `${a.share25}%`, height: "100%", background: a.color, borderRadius: 6 }} />
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, color: "#4EC9B0", fontWeight: 600, marginBottom: 5 }}>장점</div>
+                    {a.pros.map((p, j) => <div key={j} style={{ fontSize: 11, color: "#888", lineHeight: 1.6, display: "flex", gap: 6 }}><span style={{ color: "#4EC9B0" }}>+</span>{p}</div>)}
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, color: "#FF8C69", fontWeight: 600, marginBottom: 5 }}>한계</div>
+                    {a.cons.map((c, j) => <div key={j} style={{ fontSize: 11, color: "#888", lineHeight: 1.6, display: "flex", gap: 6 }}><span style={{ color: "#FF8C69" }}>−</span>{c}</div>)}
+                  </div>
+                  {i === 0 && (
+                    <div style={{ marginTop: 8, background: "#0F1F18", borderRadius: 6, padding: "8px 12px" }}>
+                      <div style={{ fontSize: 10, color: "#4EC9B0", fontWeight: 600, marginBottom: 4 }}>주요 채택 고객</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {a.users.map((u, j) => <span key={j} style={{ fontSize: 10, background: "#E8C54718", color: "#E8C547", borderRadius: 4, padding: "2px 7px" }}>{u}</span>)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* 모듈형 채택률 트렌드 */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "20px 22px" }}>
+                <div style={{ fontSize: 12, color: "#888", fontWeight: 500, marginBottom: 4 }}>📊 액추에이터 시장 세그먼트 추이 (추정)</div>
+                <div style={{ fontSize: 10, color: "#444", marginBottom: 12 }}>연구용·초기상업·대량양산 비중 (%) — 수직계열화 압력 반영</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={adoptionScenarios} stackOffset="expand">
+                    <XAxis dataKey="year" tick={{ fill: "#555", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#555", fontSize: 10 }} tickFormatter={v => `${(v*100).toFixed(0)}%`} />
+                    <Tooltip contentStyle={{ background: "#1A1A1E", border: "1px solid #333", fontSize: 11 }} formatter={(v, n) => [`${v}%`, n]} />
+                    <Bar dataKey="research" name="연구·교육" stackId="a" fill="#E8C547" />
+                    <Bar dataKey="earlyComm" name="초기상업화" stackId="a" fill="#4EC9B0" />
+                    <Bar dataKey="massComm" name="대량양산" stackId="a" fill="#7B9FFF" />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 8 }}>
+                  {[["#E8C547","연구·교육"],["#4EC9B0","초기상업화"],["#7B9FFF","대량양산"]].map(([c,n],i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#555" }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 2, background: c }} />{n}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "20px 22px" }}>
+                <div style={{ fontSize: 12, color: "#888", fontWeight: 500, marginBottom: 4 }}>💰 글로벌 휴머노이드 시장 vs 로보티즈 모듈형 TAM</div>
+                <div style={{ fontSize: 10, color: "#444", marginBottom: 12 }}>단위: 십억달러 (Yole/다이와 추정 기반)</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={tamData}>
+                    <XAxis dataKey="year" tick={{ fill: "#555", fontSize: 10 }} />
+                    <YAxis yAxisId="left" tick={{ fill: "#555", fontSize: 10 }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fill: "#555", fontSize: 10 }} />
+                    <Tooltip contentStyle={{ background: "#1A1A1E", border: "1px solid #333", fontSize: 11 }} formatter={(v, n) => [n === "채택률%" ? `${v}%` : `$${v}B`, n]} />
+                    <Line yAxisId="left" type="monotone" dataKey="market" name="글로벌 시장" stroke="#7B9FFF" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line yAxisId="left" type="monotone" dataKey="tam" name="로보티즈 TAM" stroke="#E8C547" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line yAxisId="right" type="monotone" dataKey="adopt" name="채택률%" stroke="#4EC9B0" strokeWidth={1} strokeDasharray="4 2" dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div style={{ marginTop: 8, fontSize: 10, color: "#444", lineHeight: 1.6 }}>
+                  * 글로벌 시장 성장에도 채택률(%)은 수직계열화로 점진 하락 — TAM 절대값은 성장하나 점유율 방어가 핵심
+                </div>
+              </div>
+            </div>
+
+            {/* 4단계 전환 로드맵 */}
+            <div className="card" style={{ padding: "20px 22px", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#888", fontWeight: 500, marginBottom: 14 }}>🗺️ 페이스메이커 → 표준 플랫폼: 4단계 전환 시나리오</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {pacemaker.map((p, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "200px 1fr 1fr", gap: 14, padding: "14px 16px", background: "#0D0D10", borderRadius: 8, borderLeft: `3px solid ${p.color}` }}>
+                    <div>
+                      <div style={{ fontSize: 10, background: `${p.color}22`, color: p.color, borderRadius: 4, padding: "3px 8px", display: "inline-block", marginBottom: 6, fontFamily: "'IBM Plex Mono',monospace" }}>{p.icon} {p.label}</div>
+                      <div style={{ fontSize: 12, color: "#C0BDB4", fontWeight: 600, lineHeight: 1.5 }}>{p.title}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#555", fontWeight: 600, marginBottom: 4 }}>시장 구도</div>
+                      <div style={{ fontSize: 11, color: "#888", lineHeight: 1.7 }}>{p.desc}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: p.color, fontWeight: 600, marginBottom: 4 }}>로보티즈 전략 포인트</div>
+                      <div style={{ fontSize: 11, color: "#888", lineHeight: 1.7, marginBottom: 6 }}>{p.robotis}</div>
+                      <div style={{ fontSize: 10, color: "#555", fontFamily: "'IBM Plex Mono',monospace" }}>📌 KPI: {p.kpi}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 핵심 모니터링 지표 */}
+            <div className="card" style={{ padding: "20px 22px" }}>
+              <div style={{ fontSize: 12, color: "#888", fontWeight: 500, marginBottom: 12 }}>📡 페이스메이커 포지션 강화 여부 — 투자자 핵심 모니터링 지표</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {[
+                  { title: "생태계 지표", color: "#E8C547", items: [
+                    "ROS2 공식 DYNAMIXEL 패키지 월 다운로드 수 (공개 지표)",
+                    "글로벌 로봇 경진대회(DARPA·RoboCup·ICRA) DYNAMIXEL 탑재 팀 비율",
+                    "신규 피지컬AI 스타트업의 첫 하드웨어 선택 비율",
+                  ]},
+                  { title: "상업화 전환 지표", color: "#4EC9B0", items: [
+                    "AI 워커 누적 수주 → 연간 출하 전환율",
+                    "로봇 손 HX5 빅테크 납품 고객사 수 (공식 확인 가능한 것)",
+                    "DYNAMIXEL Y 시리즈 OEM 설계 채택 건수 (협동로봇 대상)",
+                  ]},
+                  { title: "수직계열화 위험 신호", color: "#FF8C69", items: [
+                    "보스턴다이내믹스·오픈AI가 자체 액추에이터 내재화 발표 여부",
+                    "유니트리 R1 글로벌 연구기관 채택 확산 속도",
+                    "로보티즈 수출 매출 중 연구용 비중 감소 추이",
+                  ]},
+                ].map((g, i) => (
+                  <div key={i} style={{ background: "#0A0A0C", borderRadius: 8, padding: "14px 16px", border: `1px solid ${g.color}33` }}>
+                    <div style={{ fontSize: 11, color: g.color, fontWeight: 700, marginBottom: 10 }}>{g.title}</div>
+                    {g.items.map((it, j) => (
+                      <div key={j} style={{ display: "flex", gap: 7, marginBottom: 7, fontSize: 11, color: "#777", lineHeight: 1.6 }}>
+                        <span style={{ color: g.color, flexShrink: 0 }}>•</span>{it}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 12, background: "#0F1020", border: "1px solid #7B9FFF33", borderRadius: 8, padding: "10px 16px", fontSize: 12, color: "#7B9FFF", lineHeight: 1.8 }}>
+                💡 핵심 테제 요약: <strong>2025~2027년은 모듈형 채택 피크 구간</strong>. 이 창이 열려 있는 동안 로보티즈가 연구 표준에서 상업 표준으로 전환을 얼마나 빠르게 완성하느냐가 2030년 이후의 포지션을 결정합니다. 로봇 손·AI 워커의 Lock-in 성공 여부가 PSR 87배 정당화의 최종 판단 기준.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ 산업 현황 (기존 tab 2 → 숨김, 실적은 tab 5로) ══ */}
+        {tab === 99 && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>🌐 글로벌 로봇 시장 전망</div>
+                {[
+                  { label: "글로벌 로봇 액추에이터 시장", val2022: "134억달러", val2032: "400억달러", cagr: "+11.5% CAGR" },
+                  { label: "글로벌 협동로봇 시장", val2022: "8억달러", val2032: "80억달러", cagr: "+33% CAGR" },
+                  { label: "국내 AMR·AGV 시장", val2022: "2,850억원", val2032: "1.48조원(2026F)", cagr: "+45.8% CAGR" },
+                  { label: "휴머노이드 로봇 시장(신규)", val2022: "신흥 시장", val2032: "2030년 60조원+", cagr: "골드만삭스 추정" },
+                ].map((m, i) => (
+                  <div key={i} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: i < 3 ? "1px solid #1A1A1E" : "none" }}>
+                    <div style={{ fontSize: 12, color: "#C0BDB4", marginBottom: 6 }}>{m.label}</div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, color: "#666" }}>{m.val2022}</span>
+                      <span style={{ fontSize: 11, color: "#555" }}>→</span>
+                      <span style={{ fontSize: 12, color: "#E8C547", fontWeight: 600 }}>{m.val2032}</span>
+                      <span style={{ fontSize: 10, color: "#4EC9B0", background: "#0F1F18", borderRadius: 4, padding: "2px 6px" }}>{m.cagr}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>🏆 경쟁사 동향 (2026 기준)</div>
+                {[
+                  { name: "MAXON Motor (스위스)", type: "액추에이터", pos: "글로벌 정밀 액추에이터 1위", threat: "HIGH" },
+                  { name: "Faulhaber (독일)", type: "마이크로 모터", pos: "소형 정밀 구동 강자", threat: "MED" },
+                  { name: "뉴로메카", type: "협동로봇", pos: "국내 협동로봇 점유율 상위", threat: "MED" },
+                  { name: "에스비비테크", type: "감속기", pos: "국내 감속기 신흥 강자", threat: "MED" },
+                  { name: "레인보우로보틱스", type: "휴머노이드", pos: "삼성전자 지분·RH-P12 양산", threat: "HIGH" },
+                  { name: "Figure AI / 1X / Agility", type: "휴머노이드", pos: "글로벌 피지컬 AI 경쟁사", threat: "WATCH" },
+                ].map((c, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < 5 ? "1px solid #1A1A1E" : "none" }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: "#C0BDB4" }}>{c.name}</div>
+                      <div style={{ fontSize: 10, color: "#666" }}>{c.type} · {c.pos}</div>
+                    </div>
+                    <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: c.threat === "HIGH" ? "#FF8C69" : c.threat === "WATCH" ? "#E8C547" : "#4EC9B0", background: c.threat === "HIGH" ? "#2A1010" : c.threat === "WATCH" ? "#1A1800" : "#0F1F18", padding: "3px 8px", borderRadius: 4 }}>
+                      {c.threat}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: "22px 24px" }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 14, fontWeight: 500 }}>🔍 재무 건전성 레이더 (2025 추정)</div>
+              <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                <div style={{ flex: 1 }}>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <RadarChart data={radarData}>
+                      <PolarGrid stroke="#222" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: "#666", fontSize: 11 }} />
+                      <Radar name="로보티즈" dataKey="A" stroke="#E8C547" fill="#E8C547" fillOpacity={0.15} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ flex: 1, fontSize: 12, color: "#888", lineHeight: 1.9 }}>
+                  <div><span style={{ color: "#4EC9B0" }}>성장성(90)</span>: 피지컬AI 테마 수혜, 매출 +40% 성장</div>
+                  <div><span style={{ color: "#E8C547" }}>유동성(75)</span>: 현금성 자산 충분, 단기 차입 낮음</div>
+                  <div><span style={{ color: "#7B9FFF" }}>안정성(68)</span>: 부채비율 낮으나 적자 이력 주의</div>
+                  <div><span style={{ color: "#FF8C69" }}>수익성(55)</span>: 2025년 첫 흑자 전환, 개선 중</div>
+                  <div><span style={{ color: "#aaa" }}>활동성(62)</span>: 재고자산 회전율 개선 필요</div>
+                  <div style={{ marginTop: 10, fontSize: 11, color: "#555" }}>* 점수는 동종업계 상대 기준 추정치</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ 5. 실적 추이 ══ */}
+        {/* ══ 5. 실적 추이 ══ */}
+        {tab === 5 && (
+          <div>
+            {/* 물적분할 서사 박스 */}
+            <div style={{ background: "linear-gradient(135deg,#0D0D10,#0A0E14)", border: "1px solid #7B9FFF44", borderRadius: 12, padding: "18px 22px", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#7B9FFF", marginBottom: 4 }}>📖 실적 해석의 핵심 서사 — 왜 분할했는가</div>
+              <div style={{ fontSize: 11, color: "#555", marginBottom: 14 }}>2025.06.01 로보티즈AI 물적분할 / 연결 기준 실적 변경</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                {[
+                  { period: "~2021", phase: "Phase 1", color: "#4EC9B0",
+                    title: "액추에이터 성장기 — 글로벌 표준 구축",
+                    body: "DYNAMIXEL 글로벌 연구·교육 80%+ 채택. 2019년 영업이익 +17억 흑자. 자율주행(GAEMI) R&D 병행 — 당시엔 AMR·배송로봇이 유망한 확장 방향.",
+                    signal: "✅ 본업 경쟁력 확고" },
+                  { period: "2021~2024", phase: "Phase 2", color: "#E8C547",
+                    title: "자율주행 병행 투자 — 시장 대체 효과 제한적",
+                    body: "GAEMI 기술력은 성장했으나(운행안전인증 국내 1호) 배송로봇 시장 침투 느림. 매출 기여 1.5% 수준. 같은 시기 오픈AI·테슬라가 피지컬 AI·휴머노이드에 투자 — 액추에이터 포텐셜 재조명.",
+                    signal: "🔄 외부 환경 급변" },
+                  { period: "2025~", phase: "Phase 3", color: "#4EC9B0",
+                    title: "글로벌 빅테크 수요에 맞춰 초점 재조정",
+                    body: "자율주행은 로보티즈AI로 분리해 독자 성장 경로 부여. 존속법인은 빅테크가 주목하는 피지컬 AI 핵심 부품 집중. QDD·우즈벡 Capa 7배 확대로 열린 시장 선점.",
+                    signal: "🎯 시장 타이밍 재조정" },
+                ].map((s, i) => (
+                  <div key={i} style={{ background: "#0A0A0C", borderRadius: 8, padding: "14px 16px", border: "1px solid " + s.color + "44" }}>
+                    <div style={{ fontSize: 9, color: s.color, fontFamily: "'IBM Plex Mono',monospace", marginBottom: 3 }}>{s.period}</div>
+                    <div style={{ fontSize: 10, color: s.color, fontWeight: 700, marginBottom: 6 }}>{s.phase}</div>
+                    <div style={{ fontSize: 12, color: "#C0BDB4", fontWeight: 600, marginBottom: 8, lineHeight: 1.5 }}>{s.title}</div>
+                    <div style={{ fontSize: 11, color: "#777", lineHeight: 1.7, marginBottom: 8 }}>{s.body}</div>
+                    <div style={{ fontSize: 10, background: s.color + "18", color: s.color, borderRadius: 4, padding: "3px 8px", display: "inline-block" }}>{s.signal}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center", marginBottom: 12 }}>
+                <div style={{ background: "#140A0A", borderRadius: 8, padding: "12px 16px", border: "1px solid #FF8C6933" }}>
+                  <div style={{ fontSize: 11, color: "#FF8C69", fontWeight: 600, marginBottom: 8 }}>분할 전 — 자율주행 R&D가 액추에이터 흑자를 상쇄 (2023)</div>
+                  {[["액추에이터 영업이익(추정)", "+약 20억", "#4EC9B0"], ["자율주행 R&D 비용", "−약 73억", "#FF8C69"], ["전사 영업이익", "−53억", "#FF4444"]].map(([k, v, c], i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "4px 0", borderBottom: i < 2 ? "1px solid #1A1A1E" : "none" }}>
+                      <span style={{ color: "#666" }}>{k}</span>
+                      <span style={{ color: c, fontFamily: "'IBM Plex Mono',monospace" }}>{v}</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 6, fontSize: 10, color: "#555" }}>→ 기술 성장 대비 시장 침투가 느린 자율주행에 비용 집중된 구조.</div>
+                </div>
+                <div style={{ fontSize: 20, color: "#333", textAlign: "center" }}>→</div>
+                <div style={{ background: "#0F1A0F", borderRadius: 8, padding: "12px 16px", border: "1px solid #4EC9B033" }}>
+                  <div style={{ fontSize: 11, color: "#4EC9B0", fontWeight: 600, marginBottom: 8 }}>분할 후 — 존속법인 본업 집중 (2025E)</div>
+                  {[["액추에이터 영업이익", "+52억", "#4EC9B0"], ["자율주행 비용 (로보티즈AI)", "분리", "#7B9FFF"], ["전사 OPM", "+12.4%", "#4EC9B0"]].map(([k, v, c], i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "4px 0", borderBottom: i < 2 ? "1px solid #1A1A1E" : "none" }}>
+                      <span style={{ color: "#666" }}>{k}</span>
+                      <span style={{ color: c, fontFamily: "'IBM Plex Mono',monospace" }}>{v}</span>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 6, fontSize: 10, color: "#555" }}>→ QDD + 우즈벡 Capa로 중국 대비 가격경쟁력 회복 목표.</div>
+                </div>
+              </div>
+              <div style={{ background: "#0E0E18", border: "1px solid #7B9FFF33", borderRadius: 8, padding: "10px 16px", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: "#7B9FFF", fontWeight: 700, marginBottom: 6 }}>💡 투자 관점 핵심 질문</div>
+                <div style={{ fontSize: 12, color: "#888", lineHeight: 1.8 }}>
+                  이번 분할은 글로벌 빅테크의 피지컬 AI 투자 확대라는 외부 환경 변화에 대한 전략적 재조정입니다.
+                  관건은 ① QDD·우즈벡 Capa로 중국 대비 가격경쟁력을 실제로 회복할 수 있는가,
+                  ② 로보티즈AI가 연결 실적의 부담이 아닌 독자 성장 자산이 될 수 있는가 — 이 두 가지입니다.
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: "#444", lineHeight: 1.5 }}>
+                ⚠️ 아래 차트는 연결 기준으로 로보티즈AI 손익이 포함됩니다. 존속법인 단독 수익성은 연결 기준보다 높을 수 있습니다.
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 16, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 4, fontWeight: 500 }}>📊 연간 매출 & 영업이익 추이 (억원)</div>
+                <div style={{ fontSize: 11, color: "#444", marginBottom: 16 }}>* 2025E 추정 · 2026F 다이와증권 전망</div>
+                <ResponsiveContainer width="100%" height={210}>
+                  <BarChart data={revenueData} barGap={3}>
+                    <XAxis dataKey="year" tick={{ fill: "#555", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: "#555", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CTooltip />} />
+                    <ReferenceLine y={0} stroke="#333" />
+                    <Bar dataKey="rev" name="매출액" radius={[4, 4, 0, 0]}>
+                      {revenueData.map((_, i) => <Cell key={i} fill={i >= 4 ? "#E8C54766" : "#E8C547"} />)}
+                    </Bar>
+                    <Bar dataKey="op" name="영업이익" radius={[4, 4, 0, 0]}>
+                      {revenueData.map((e, i) => <Cell key={i} fill={e.op >= 0 ? "#4EC9B066" : "#FF8C6955"} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 16, fontWeight: 500 }}>📋 실적 요약표 (연결기준)</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {["구분", "2023", "2024", "2025E"].map(h => (
+                        <th key={h} style={{ textAlign: "right", color: "#555", fontWeight: 500, paddingBottom: 8, borderBottom: "1px solid #1E1E24" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ["매출액(억)", "291", "300", "420"],
+                      ["YoY(%)", "+11.8", "+3.1", "+40"],
+                      ["영업이익(억)", "-53", "-30", "+52"],
+                      ["OPM(%)", "-18.2", "-10.0", "+12.4"],
+                      ["지배순이익(억)", "-27", "-5", "+18"],
+                    ].map((r, i) => (
+                      <tr key={i}>
+                        {r.map((c, j) => (
+                          <td key={j} style={{ textAlign: "right", padding: "8px 0", borderBottom: "1px solid #111116", color: j === 0 ? "#777" : c.includes("-") ? "#FF8C69" : c.includes("+") ? "#4EC9B0" : "#B0ACA4", fontFamily: j > 0 ? "'IBM Plex Mono',monospace" : "inherit", fontSize: j === 0 ? 11 : 12 }}>
+                            {c}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: 14, background: "#0F1F18", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#4EC9B0", lineHeight: 1.7 }}>
+                  ✅ 2025년 코스닥 상장(2018년) 이후 첫 연간 흑자 전환. 4Q25 액추에이터 OPM 36% 달성.
+                </div>
+              </div>
+            </div>
+            <div className="card" style={{ padding: "22px 24px" }}>
+              <div style={{ fontSize: 12, color: "#888", marginBottom: 4, fontWeight: 500 }}>📈 분기별 실적 추이 (2024~2025)</div>
+              <div style={{ fontSize: 11, color: "#444", marginBottom: 16 }}>매출액(막대, 억원) / 영업이익(선, 억원)</div>
+              <ResponsiveContainer width="100%" height={190}>
+                <ComposedChart data={quarterData}>
+                  <XAxis dataKey="q" tick={{ fill: "#555", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "#555", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CTooltip />} />
+                  <ReferenceLine y={0} stroke="#333" />
+                  <Bar dataKey="rev" name="매출액" radius={[3, 3, 0, 0]}>
+                    {quarterData.map((_, i) => <Cell key={i} fill={i >= 4 ? "#E8C54788" : "#E8C54744"} />)}
+                  </Bar>
+                  <Line type="monotone" dataKey="op" name="영업이익" stroke="#4EC9B0" strokeWidth={2} dot={{ r: 4, fill: "#4EC9B0" }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div style={{ marginTop: 12, fontSize: 11, color: "#555", lineHeight: 1.8 }}>
+                ● 2025년 1분기부터 4분기 연속 흑자. 3Q25 매출 97억원(+35% YoY), 영업이익 22억원.
+                ● 4Q25 매출 116억원, 영업이익 21억원 — 액추에이터 OPM 36% 역대 최고.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 6 && (
+          <div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 16, fontWeight: 500 }}>💰 밸류에이션 지표</div>
+                {valuation.map((v, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: i < valuation.length - 1 ? "1px solid #1A1A1E" : "none" }}>
+                    <span style={{ fontSize: 12, color: "#666" }}>{v.label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: v.color, fontFamily: v.mono ? "'IBM Plex Mono',monospace" : "inherit" }}>{v.value}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 14, background: "#1A1010", border: "1px solid #3A2020", borderRadius: 8, padding: "10px 12px", fontSize: 11, color: "#FF8C69", lineHeight: 1.7 }}>
+                  ⚠️ 2025년 주가 +1,052% 급등 이후 PSR 87배 수준의 극단적 프리미엄. 컨센서스 대비 -38% 하락 여력 존재. 실적 추가 가시화 확인 필수.
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: "22px 24px" }}>
+                <div style={{ fontSize: 12, color: "#888", marginBottom: 16, fontWeight: 500 }}>📊 동종업종 밸류에이션 비교</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr>
+                      {["기업명", "시총", "PSR(25E)", "PBR(25E)"].map(h => (
+                        <th key={h} style={{ textAlign: "center", color: "#555", fontWeight: 500, paddingBottom: 8, borderBottom: "1px solid #1E1E24", fontSize: 11 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {peers.map((p, i) => (
+                      <tr key={i} style={{ background: i === 0 ? "#1A1A0A" : "transparent" }}>
+                        <td style={{ padding: "9px 4px", color: p.color, fontWeight: i === 0 ? 600 : 400, fontSize: 12, borderBottom: "1px solid #111116" }}>{p.name}</td>
+                        <td style={{ textAlign: "center", color: "#888", fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, borderBottom: "1px solid #111116" }}>{p.cap}</td>
+                        <td style={{ textAlign: "center", color: i === 0 ? "#FF8C69" : "#888", fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, borderBottom: "1px solid #111116" }}>{p.psr25}</td>
+                        <td style={{ textAlign: "center", color: i === 0 ? "#FF8C69" : "#888", fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, borderBottom: "1px solid #111116" }}>{p.pbr25}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 11, color: "#888", marginBottom: 10 }}>애널리스트 목표주가 범위</div>
+                  <div style={{ position: "relative", height: 36, background: "#1A1A1E", borderRadius: 6, overflow: "hidden" }}>
+                    <div style={{ position: "absolute", left: "22%", width: "55%", height: "100%", background: "#4EC9B022", borderLeft: "2px solid #4EC9B0", borderRight: "2px solid #7B9FFF" }} />
+                    <div style={{ position: "absolute", left: "71%", transform: "translateX(-50%)", top: "50%", transform: "translateY(-50%) translateX(-50%)", width: 3, height: "100%", background: "#E8C547" }} />
+                    <div style={{ position: "absolute", left: "22%", top: -18, fontSize: 10, color: "#4EC9B0", fontFamily: "'IBM Plex Mono',monospace" }}>77,000</div>
+                    <div style={{ position: "absolute", left: "60%", top: -18, fontSize: 10, color: "#E8C547", fontFamily: "'IBM Plex Mono',monospace" }}>149,000</div>
+                    <div style={{ position: "absolute", right: "0%", top: -18, fontSize: 10, color: "#7B9FFF", fontFamily: "'IBM Plex Mono',monospace" }}>360,000</div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "#555" }}>
+                    <span>최저 77,000</span><span style={{ color: "#E8C547" }}>컨센서스 149,000</span><span style={{ color: "#7B9FFF" }}>다이와 360,000</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 종합 의견 */}
+            <div className="card" style={{ padding: "22px 24px", borderTop: "3px solid #7B9FFF" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#7B9FFF", marginBottom: 14 }}>🔍 애널리스트 종합 의견 (2026.03 기준)</div>
+              <div style={{ fontSize: 13, color: "#B0ACA4", lineHeight: 2 }}>
+                로보티즈는 26년 원천기술 기반의 <span style={{ color: "#E8C547", fontWeight: 600 }}>피지컬 AI 핵심 부품사</span>로, 2025년 코스닥 상장(2018년) 이후 첫 연간 흑자 전환에 성공했습니다.
+                보스턴다이내믹스 공급, MIT 공동연구, LG전자 협약 등 글로벌 파트너십을 통해 기술력이 입증됐습니다.<br />
+                단, <span style={{ color: "#FF8C69", fontWeight: 600 }}>주가 1년 +1,052% 급등으로 PSR 87배의 극단적 프리미엄</span>이 형성된 상태이며,
+                컨센서스 목표가 대비 38% 하락 여력이 존재합니다. 2026년 로봇 손 양산 개시·AI 워커 수주 가시화·흑자 지속 여부가
+                핵심 촉매입니다. <span style={{ color: "#E8C547" }}>신규 진입은 2Q26 테슬라 옵티머스 생산량 발표 이후 실적 추가 확인 후 분할 접근을 권고합니다.</span>
+              </div>
+              <div style={{ marginTop: 16, background: "#0D0D0F", borderRadius: 8, padding: "12px 16px", fontSize: 11, color: "#444", lineHeight: 1.7 }}>
+                ⚠️ 본 자료는 투자 참고 목적이며, Claude는 금융 전문가가 아닙니다. 투자 결정의 최종 책임은 투자자 본인에게 있습니다. 2023년 한국IR협의회 리포트 포맷을 기반으로 2026년 공개 정보를 재구성하였습니다.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
